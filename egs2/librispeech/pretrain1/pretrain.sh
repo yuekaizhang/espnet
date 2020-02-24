@@ -1,0 +1,1 @@
+../../TEMPLATE/pretrain1/pretrain.sh
