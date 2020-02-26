@@ -20,7 +20,7 @@ from espnet.nets.pytorch_backend.transformer.positionwise_feed_forward import (
 )
 from espnet.nets.pytorch_backend.transformer.repeat import repeat
 from espnet.nets.pytorch_backend.transformer.subsampling import Conv2dSubsampling
-from espnet2.asr.encoder.abs_encoder import AbsEncoder
+from espnet2.pretrain.encoder.abs_encoder import AbsEncoder #!!!!!!!!!!!
 
 
 class TransformerEncoder(AbsEncoder):

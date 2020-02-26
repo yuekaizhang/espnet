@@ -16,13 +16,17 @@ from typeguard import check_return_type
 # from espnet2.asr.decoder.abs_decoder import AbsDecoder
 # from espnet2.asr.decoder.rnn_decoder import RNNDecoder
 # from espnet2.asr.decoder.transformer_decoder import TransformerDecoder
-# from espnet2.asr.e2e import ASRE2E
-# from espnet2.asr.encoder.abs_encoder import AbsEncoder
+from espnet2.pretrain.e2e import PRETRAINE2E
+from espnet2.pretrain.encoder.abs_encoder import AbsEncoder
 # from espnet2.asr.encoder.rnn_encoder import RNNEncoder
-# from espnet2.asr.encoder.transformer_encoder import TransformerEncoder
+from espnet2.pretrain.encoder.transformer_encoder import TransformerEncoder
 # from espnet2.asr.encoder.vgg_rnn_encoder import VGGRNNEncoder
-# from espnet2.asr.frontend.abs_frontend import AbsFrontend
-# from espnet2.asr.frontend.default import DefaultFrontend
+from espnet2.pretrain.frontend.abs_frontend import AbsFrontend
+from espnet2.pretrain.frontend.default import DefaultFrontend
+# need fix type check above
+#from espnet2.asr.frontend.default import DefaultFrontend
+#from espnet2.asr.frontend.abs_frontend import AbsFrontend
+
 from espnet2.layers.abs_normalize import AbsNormalize
 from espnet2.layers.global_mvn import GlobalMVN
 from espnet2.layers.utterance_mvn import UtteranceMVN
@@ -32,7 +36,10 @@ from espnet2.torch_utils.initialize import initialize
 from espnet2.train.class_choices import ClassChoices
 from espnet2.train.collate_fn import CommonCollateFn
 from espnet2.train.preprocessor import CommonPreprocessor
+
 from espnet2.train.trainer import Trainer
+# change Trainer here
+
 from espnet2.utils.get_default_kwargs import get_default_kwargs
 from espnet2.utils.nested_dict_action import NestedDictAction
 from espnet2.utils.types import int_or_none
@@ -56,10 +63,10 @@ normalize_choices = ClassChoices(
 encoder_choices = ClassChoices(
     "encoder",
     classes=dict(
-        transformer=TransformerEncoder, vgg_rnn=VGGRNNEncoder, rnn=RNNEncoder,
+        transformer=TransformerEncoder,
     ),
     type_check=AbsEncoder,
-    default="rnn",
+    default="transformer",
 )
 
 
@@ -76,11 +83,11 @@ class PretrainTask(AbsTask):
         # --encoder and --encoder_conf
         encoder_choices,
         # --decoder and --decoder_conf
-        decoder_choices,
+        #decoder_choices,
     ]
 
     # If you need to modify train() or eval() procedures, change Trainer class here
-    trainer = Trainer
+    trainer = Trainer  # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! change this, l1_loss 
     iterator_option = IteratorOption
 
     @classmethod
@@ -120,16 +127,16 @@ class PretrainTask(AbsTask):
             help="The number of input dimension of the feature",
         )
 
-        group.add_argument(
-            "--ctc_conf",
-            action=NestedDictAction,
-            default=get_default_kwargs(CTC),
-            help="The keyword arguments for CTC class.",
-        )
+        #group.add_argument(
+        #    "--ctc_conf",
+        #    action=NestedDictAction,
+        #    default=get_default_kwargs(CTC),
+        #    help="The keyword arguments for CTC class.",
+        #)
         group.add_argument(
             "--e2e_conf",
             action=NestedDictAction,
-            default=get_default_kwargs(ASRE2E),
+            default=get_default_kwargs(PRETRAINE2E),
             help="The keyword arguments for E2E class.",
         )
 
@@ -172,7 +179,7 @@ class PretrainTask(AbsTask):
         Tuple[List[str], Dict[str, torch.Tensor]],
     ]:
         assert check_argument_types()
-        # NOTE(kamo): int value = 0 is reserved by CTC-blank symbol
+        # NOTE(kamo): int value = 0 is reservedgg by CTC-blank symbol
         return CommonCollateFn(float_pad_value=0.0, int_pad_value=-1)
 
     @classmethod
@@ -193,7 +200,7 @@ class PretrainTask(AbsTask):
         assert check_return_type(retval)
         return retval
 
-    @classmethod
+    @classmethod # ??? what's this for?
     def required_data_names(cls, inference: bool = False) -> Tuple[str, ...]:
         if not inference:
             retval = ("speech", "text")
@@ -209,7 +216,7 @@ class PretrainTask(AbsTask):
         return retval
 
     @classmethod
-    def build_model(cls, args: argparse.Namespace) -> ASRE2E:
+    def build_model(cls, args: argparse.Namespace) -> PRETRAINE2E:
         assert check_argument_types()
         if isinstance(args.token_list, str):
             with open(args.token_list, encoding="utf-8") as f:
@@ -229,7 +236,7 @@ class PretrainTask(AbsTask):
             # Extract features in the model
             frontend_class = frontend_choices.get_class(args.frontend)
             frontend = frontend_class(**args.frontend_conf)
-            input_size = frontend.output_size()
+            input_size = frontend.output_size()  # check this, related to raw feature ?
         else:
             # Give features from data-loader
             args.frontend = None
@@ -249,31 +256,31 @@ class PretrainTask(AbsTask):
         encoder = encoder_class(input_size=input_size, **args.encoder_conf)
 
         # 4. Decoder
-        decoder_class = decoder_choices.get_class(args.decoder)
+        #decoder_class = decoder_choices.get_class(args.decoder)
 
-        decoder = decoder_class(
-            vocab_size=vocab_size,
-            encoder_output_size=encoder.output_size(),
-            **args.decoder_conf,
-        )
+        #decoder = decoder_class(
+        #    vocab_size=vocab_size,
+        #    encoder_output_size=encoder.output_size(),
+        #    **args.decoder_conf,
+        #)
 
         # 4. CTC
-        ctc = CTC(
-            odim=vocab_size, encoder_output_sizse=encoder.output_size(), **args.ctc_conf
-        )
+        #ctc = CTC(
+        #    odim=vocab_size, encoder_output_sizse=encoder.output_size(), **args.ctc_conf
+        #)
 
         # 5. RNN-T Decoder (Not implemented)
-        rnnt_decoder = None
+        rnnt_decoder = None    # why write this separately ? 
 
         # 6. Build model
-        model = ASRE2E(
+        model = PRETRAINE2E(
             vocab_size=vocab_size,
             frontend=frontend,
             normalize=normalize,
             encoder=encoder,
-            decoder=decoder,
-            ctc=ctc,
-            rnnt_decoder=rnnt_decoder,
+            #decoder=decoder,
+            #ctc=ctc,
+            #rnnt_decoder=rnnt_decoder,
             token_list=token_list,
             **args.e2e_conf,
         )
