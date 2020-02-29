@@ -39,7 +39,7 @@ class PretrainDecoder(AbsDecoder):
         assert check_argument_types()
 
         super().__init__()
-        eprojs = encoder_output_size
+        self.eprojs = encoder_output_size
         self.dtype = rnn_type
         self.dunits = hidden_size
         self.dlayers = num_layers
@@ -53,6 +53,7 @@ class PretrainDecoder(AbsDecoder):
         self.layer_norm = LayerNorm(size=self.dunits, eps=layer_norm_eps)
 
         self.decoder = torch.nn.ModuleList()
+        self.decoder += [torch.nn.Linear(self.eprojs, self.dunits)]
         for _ in range(1, self.dlayers):
             self.decoder += [
                 torch.nn.Linear(self.dunits, self.dunits)
