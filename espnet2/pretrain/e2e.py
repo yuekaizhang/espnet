@@ -206,11 +206,11 @@ class PRETRAINE2E(AbsE2E):
         # -> encoder_out: (Batch, Length2, Dim2)
 
 
-        feats_masked,mask_label = process_train_MAM_data(feats,config=None)
+        #feats_masked,mask_label = process_train_MAM_data(feats,config=None)
 
 
-        encoder_out, encoder_out_lens, _ = self.encoder(feats_masked, feats_lengths)
-
+        encoder_out, encoder_out_lens,mask_label,encoder_out_gold, _ = self.encoder(feats, feats_lengths)
+        
         
 
         assert encoder_out.size(0) == speech.size(0), (
@@ -223,7 +223,7 @@ class PRETRAINE2E(AbsE2E):
         )
         
         # add return mask_label, feats
-        return encoder_out, encoder_out_lens, mask_label, feats
+        return encoder_out, encoder_out_lens, mask_label, encoder_out_gold
 
     def _extract_feats(
         self, speech: torch.Tensor, speech_lengths: torch.Tensor
@@ -249,13 +249,13 @@ class PRETRAINE2E(AbsE2E):
         encoder_out: torch.Tensor,
         encoder_out_lens: torch.Tensor,
         mask_label: torch.Tensor,
-        feats: torch.Tensor,
+        encoder_out_gold: torch.Tensor,
     ):  
 
         # for now, just keep pred_hidden_states
         pred_spec, pred_hidden_states = self.decoder(encoder_out)   # which is Spechead
         masked_spec_loss = nn.L1Loss(pred_spec.masked_select(mask_label),
-                feats.masked_select(mask_label))
+                encoder_out_gold.masked_select(mask_label))
         
         # you could add more items to return
         return masked_spec_loss

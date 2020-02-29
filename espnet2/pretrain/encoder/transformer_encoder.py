@@ -152,14 +152,24 @@ class TransformerEncoder(AbsEncoder):
             position embedded tensor and mask
         """
         masks = (~make_pad_mask(ilens)[:, None, :]).to(xs_pad.device)
+        
 
         if isinstance(self.embed, Conv2dSubsampling):
             xs_pad, masks = self.embed(xs_pad, masks)
         else:
             xs_pad = self.embed(xs_pad)
+        
+        # by yuekai
+        encoder_out_gold = xs_pad
+        xs_pad,mask_label = process_train_MAM_data(xs_pad,config=None)
+        # xs_pad already been masked
+        
         xs_pad, masks = self.encoders(xs_pad, masks)
+        
+        assert xs_pad.shape ==encoder_out_gold.shape
+        
         if self.normalize_before:
             xs_pad = self.after_norm(xs_pad)
 
         olens = masks.squeeze(1).sum(1)
-        return xs_pad, olens, None
+        return xs_pad, olens, mask_label, encoder_out_gold, None
