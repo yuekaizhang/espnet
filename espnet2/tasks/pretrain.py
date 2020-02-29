@@ -267,8 +267,9 @@ class PretrainTask(AbsTask):
         # 4. Decoder
         decoder_class = decoder_choices.get_class(args.decoder)
 
-        #TODO: output_dimension for decoder
+        #TODO: output_dimension for decoder is aligned with encoder size
         decoder = decoder_class(
+            odim=input_size
             encoder_output_size=encoder.output_size(),
             **args.decoder_conf,
         )
