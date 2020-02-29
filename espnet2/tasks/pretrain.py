@@ -288,7 +288,7 @@ class PretrainTask(AbsTask):
             frontend=frontend,
             normalize=normalize,
             encoder=encoder,
-            #decoder=decoder,
+            decoder=decoder,
             #ctc=ctc,
             #rnnt_decoder=rnnt_decoder,
             token_list=token_list,
