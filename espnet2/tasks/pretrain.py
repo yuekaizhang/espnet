@@ -13,7 +13,8 @@ from typeguard import check_argument_types
 from typeguard import check_return_type
 
 # from espnet2.asr.ctc import CTC
-# from espnet2.asr.decoder.abs_decoder import AbsDecoder
+from espnet2.pretrain.decoder.abs_decoder import AbsDecoder
+from espnet2.pretrain.decoder.pretrain_decoder import PretrainDecoder
 # from espnet2.asr.decoder.rnn_decoder import RNNDecoder
 # from espnet2.asr.decoder.transformer_decoder import TransformerDecoder
 from espnet2.pretrain.e2e import PRETRAINE2E
@@ -68,6 +69,14 @@ encoder_choices = ClassChoices(
     type_check=AbsEncoder,
     default="transformer",
 )
+decoder_chioces = ClassChoices(
+    "decoder",
+    classes=dict(
+        dense_pretrain=PretrainDecoder,
+    ),
+    type_check=AbsDecoder,
+    default="dense_pretrain",
+)
 
 
 class PretrainTask(AbsTask):
@@ -83,7 +92,7 @@ class PretrainTask(AbsTask):
         # --encoder and --encoder_conf
         encoder_choices,
         # --decoder and --decoder_conf
-        #decoder_choices,
+        decoder_choices,
     ]
 
     # If you need to modify train() or eval() procedures, change Trainer class here
@@ -256,13 +265,14 @@ class PretrainTask(AbsTask):
         encoder = encoder_class(input_size=input_size, **args.encoder_conf)
 
         # 4. Decoder
-        #decoder_class = decoder_choices.get_class(args.decoder)
+        decoder_class = decoder_choices.get_class(args.decoder)
 
-        #decoder = decoder_class(
-        #    vocab_size=vocab_size,
-        #    encoder_output_size=encoder.output_size(),
-        #    **args.decoder_conf,
-        #)
+        #TODO: output_dimension for decoder is aligned with encoder size
+        decoder = decoder_class(
+            odim=input_size
+            encoder_output_size=encoder.output_size(),
+            **args.decoder_conf,
+        )
 
         # 4. CTC
         #ctc = CTC(
@@ -278,7 +288,7 @@ class PretrainTask(AbsTask):
             frontend=frontend,
             normalize=normalize,
             encoder=encoder,
-            #decoder=decoder,
+            decoder=decoder,
             #ctc=ctc,
             #rnnt_decoder=rnnt_decoder,
             token_list=token_list,

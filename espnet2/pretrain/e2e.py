@@ -14,8 +14,9 @@ from espnet.nets.pytorch_backend.transformer.label_smoothing_loss import (
     LabelSmoothingLoss,  # noqa: H301
 )
 from espnet2.asr.ctc import CTC
-from espnet2.asr.decoder.abs_decoder import AbsDecoder
+
 from espnet2.pretrain.encoder.abs_encoder import AbsEncoder
+from espnet2.pretrain.decoder.abs_decoder import AbsDecoder
 from espnet2.pretrain.frontend.abs_frontend import AbsFrontend
 from espnet2.layers.abs_normalize import AbsNormalize
 from espnet2.torch_utils.device_funcs import force_gatherable
