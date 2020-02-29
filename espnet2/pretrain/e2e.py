@@ -14,7 +14,7 @@ from espnet.nets.pytorch_backend.transformer.label_smoothing_loss import (
     LabelSmoothingLoss,  # noqa: H301
 )
 from espnet2.asr.ctc import CTC
-#from espnet2.asr.decoder.abs_decoder import AbsDecoder
+from espnet2.asr.decoder.abs_decoder import AbsDecoder
 from espnet2.pretrain.encoder.abs_encoder import AbsEncoder
 from espnet2.pretrain,decoder.abs_decoder import AbsDecoder
 from espnet2.pretrain.frontend.abs_frontend import AbsFrontend
@@ -22,10 +22,8 @@ from espnet2.layers.abs_normalize import AbsNormalize
 from espnet2.torch_utils.device_funcs import force_gatherable
 from espnet2.train.abs_e2e import AbsE2E
 
-
 from espnet2.utils.pretrain_utils import process_train_MAM_data
 
-from espnet2.utils.pretrain_utils import MockingjaySpecPredictionHead
 
 
 class PRETRAINE2E(AbsE2E):
@@ -38,15 +36,15 @@ class PRETRAINE2E(AbsE2E):
         frontend: Optional[AbsFrontend],
         normalize: Optional[AbsNormalize],
         encoder: AbsEncoder,
-        #decoder: AbsDecoder,
+        decoder: AbsDecoder,
         #ctc: CTC,
         #rnnt_decoder: None,
         #ctc_weight: float = 0.5,
         ignore_id: int = -1,
         lsm_weight: float = 0.0,
         length_normalized_loss: bool = False,
-        report_cer: bool = True,
-        report_wer: bool = True,
+        report_cer: bool = False,
+        report_wer: bool = False,
         sym_space: str = "<space>",
         sym_blank: str = "<blank>",
     ):
@@ -66,7 +64,7 @@ class PRETRAINE2E(AbsE2E):
         self.frontend = frontend
         self.normalize = normalize
         self.encoder = encoder
-        #self.decoder = decoder
+        self.decoder = decoder
         #if ctc_weight == 0.0:
         #    self.ctc = None
         #else:
@@ -75,7 +73,7 @@ class PRETRAINE2E(AbsE2E):
         
         
         # fix places which use this 
-        self.SpecHead = PretrainDecoder(output_dim=256,config=None)
+        #self.SpecHead = MockingjaySpecPredictionHead(output_dim=256,config=None)
         
         
         self.criterion_att = LabelSmoothingLoss(
@@ -125,7 +123,7 @@ class PRETRAINE2E(AbsE2E):
         
 
 
-        encoder_out, encoder_out_lens = self.encode(speech, speech_lengths)
+        encoder_out, encoder_out_lens, mask_label, feats = self.encode(speech, speech_lengths)
 
 
 
@@ -160,17 +158,17 @@ class PRETRAINE2E(AbsE2E):
 
         # compute loss here
 
-
+        loss = self._calc_reconstruction_loss(encoder_out,encoder_out_lens,mask_label,feats)
 
 
         stats = dict(
             loss=loss.detach(),
-            loss_att=loss_att.detach() if loss_att is not None else None,
-            loss_ctc=loss_ctc.detach() if loss_ctc is not None else None,
-            acc=acc_att,
-            cer=cer_att,
-            wer=wer_att,
-            cer_ctc=cer_ctc,
+            #loss_att=loss_att.detach() if loss_att is not None else None,
+            #loss_ctc=loss_ctc.detach() if loss_ctc is not None else None,
+            #acc=acc_att,
+            #cer=cer_att,
+            #wer=wer_att,
+            #cer_ctc=cer_ctc,
         )
 
         # force_gatherable: to-device and to-tensor if scalar for DataParallel
@@ -255,7 +253,7 @@ class PRETRAINE2E(AbsE2E):
     ):  
 
         # for now, just keep pred_hidden_states
-        pred_spec, pred_hidden_states = self.SpecHead(encoder_out)
+        pred_spec, pred_hidden_states = self.decoder(encoder_out)   # which is Spechead
         masked_spec_loss = nn.L1Loss(pred_spec.masked_select(mask_label),
                 feats.masked_select(mask_label))
         
