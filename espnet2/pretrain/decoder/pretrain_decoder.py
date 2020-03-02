@@ -63,9 +63,11 @@ class PretrainDecoder(AbsDecoder):
 
     def forward(self, hidden_states):
 
-        for l in range(self.dlayers):
-            hidden_states = self.layer_norm(
-                                self.activation(
-                                    self.decoder[l](hidden_states)))
-        linear_output = self.output(hidden_states)
-        return linear_output, hidden_states
+        # for l in range(self.dlayers):
+        #     hidden_states = self.layer_norm(
+        #                         self.activation(
+        #                             self.decoder[l](hidden_states)))
+        # linear_output = self.output(hidden_states)
+        # return linear_output, hidden_states
+        # just keep the format (yuekai)
+        return hidden_states,hidden_states
