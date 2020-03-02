@@ -1,4 +1,4 @@
-batch_size: 1
+batch_size: 32
 accum_grad: 2
 max_epoch: 200
 patience: none
@@ -22,7 +22,7 @@ decoder_conf:
     num_layers: 2
     hidden_size: 1024
     dropout: 0.0
-    layer_norm_eps: 1e-12
+    layer_norm_eps: 0.000000000001 
 
 e2e_conf:
 #    ctc_weight: 0.3

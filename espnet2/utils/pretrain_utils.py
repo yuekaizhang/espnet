@@ -20,7 +20,7 @@ def process_train_MAM_data(spec,config=None):
     mask_consecutive = MASK_CONSECUTIVE
     
     
-    mask_label = np.zeros_like(spec)
+    mask_label = np.zeros_like(spec.detach().cpu()) # by Yuekai
     spec_masked = spec
 
     mask_label = torch.ByteTensor(mask_label).to(dtype=torch.uint8)

@@ -69,7 +69,7 @@ encoder_choices = ClassChoices(
     type_check=AbsEncoder,
     default="transformer",
 )
-decoder_chioces = ClassChoices(
+decoder_choices = ClassChoices(
     "decoder",
     classes=dict(
         dense_pretrain=PretrainDecoder,
@@ -269,7 +269,8 @@ class PretrainTask(AbsTask):
 
         #TODO: output_dimension for decoder is aligned with encoder size
         decoder = decoder_class(
-            odim=input_size
+            odim=input_size,
+            #encoder_output_size = 256 # fix this yuakai
             encoder_output_size=encoder.output_size(),
             **args.decoder_conf,
         )

@@ -254,7 +254,8 @@ class PRETRAINE2E(AbsE2E):
 
         # for now, just keep pred_hidden_states
         pred_spec, pred_hidden_states = self.decoder(encoder_out)   # which is Spechead
-        masked_spec_loss = nn.L1Loss(pred_spec.masked_select(mask_label),
+        loss = torch.nn.L1Loss()
+        masked_spec_loss = loss(pred_spec.masked_select(mask_label),
                 encoder_out_gold.masked_select(mask_label))
         
         # you could add more items to return

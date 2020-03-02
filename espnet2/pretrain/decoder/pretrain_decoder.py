@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 from typeguard import check_argument_types
 
-from espnet2.asr.decoder.abs_decoder import AbsDecoder
+from espnet2.pretrain.decoder.abs_decoder import AbsDecoder
 
 
 class LayerNorm(torch.nn.Module):
@@ -12,8 +12,9 @@ class LayerNorm(torch.nn.Module):
         size: int = 1024,
         eps: float = 1e-12,
     ):
-        self.weight = torch.nn.Parameter(torch.ones(hidden_size))
-        self.bias = torch.nn.Parameter(torch.zeros(hidden_size))
+        super(LayerNorm, self).__init__()
+        self.weight = torch.nn.Parameter(torch.ones(size)) # used to be hidden_size by Yuekai
+        self.bias = torch.nn.Parameter(torch.zeros(size))
         self.variance_epsilon = eps
 
     def forward(self, x):
@@ -40,7 +41,7 @@ class PretrainDecoder(AbsDecoder):
 
         super().__init__()
         self.eprojs = encoder_output_size
-        self.dtype = rnn_type
+        #self.dtype = rnn_type # why keep this ? Yuekai
         self.dunits = hidden_size
         self.dlayers = num_layers
         self.odim = odim
@@ -49,7 +50,8 @@ class PretrainDecoder(AbsDecoder):
         self.layer_norm_eps = layer_norm_eps
 
         self.dropout_linear = torch.nn.Dropout(p=dropout)
-        self.activation = F.relu()
+        self.activation = torch.nn.ReLU()
+        #self.activation = F.relu() this has bug Yuekai
         self.layer_norm = LayerNorm(size=self.dunits, eps=layer_norm_eps)
 
         self.decoder = torch.nn.ModuleList()
@@ -58,7 +60,7 @@ class PretrainDecoder(AbsDecoder):
             self.decoder += [
                 torch.nn.Linear(self.dunits, self.dunits)
             ]
-        self.output = torch.nn.Linear(self.dunits, self.odim * self.downsample_rate)
+        #self.output = torch.nn.Linear(self.dunits, self.odim * self.downsample_rate)
 
 
     def forward(self, hidden_states):
