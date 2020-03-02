@@ -69,4 +69,5 @@ class PretrainDecoder(AbsDecoder):
         #                             self.decoder[l](hidden_states)))
         # linear_output = self.output(hidden_states)
         # return linear_output, hidden_states
-        return hidden_states
+        # just keep the format (yuekai)
+        return hidden_states,hidden_states
