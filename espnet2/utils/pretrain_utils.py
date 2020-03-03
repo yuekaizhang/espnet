@@ -26,7 +26,7 @@ def process_train_MAM_data(spec,config=None):
     mask_label = torch.ByteTensor(mask_label).to(dtype=torch.uint8)
 
     # so input spec is before trunck? which with different size ? 
-    spec_len = np.sum(np.sum(spec.data.numpy(), axis=-1) != 0, axis=-1)
+    spec_len = np.sum(np.sum(spec.detach().cpu().numpy(), axis=-1) != 0, axis=-1)
     spec_len = [int(sl) for sl in spec_len]
 
 
@@ -51,6 +51,6 @@ def process_train_MAM_data(spec,config=None):
         mask_label = torch.ByteTensor(mask_label).to(dtype=torch.uint8)
         spec = spec.to(dtype=torch.float32)
 
-    return spec_masked, mask_label
+    return spec_masked, mask_label.cuda()
 
 

@@ -248,7 +248,7 @@ class PRETRAINE2E(AbsE2E):
         self,
         encoder_out: torch.Tensor,
         encoder_out_lens: torch.Tensor,
-        mask_label: torch.Tensor,
+        mask_label,
         encoder_out_gold: torch.Tensor,
     ):  
 
