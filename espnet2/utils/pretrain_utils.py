@@ -7,7 +7,7 @@ import torch
 import numpy as np
 
 MASK_PROPORTION = 0.15
-MASK_CONSECUTIVE = 1 # 7
+MASK_CONSECUTIVE = 20 # 7
 
 def process_train_MAM_data(spec,config=None):
     """
