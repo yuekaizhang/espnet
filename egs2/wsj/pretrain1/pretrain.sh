@@ -63,6 +63,12 @@ use_word_lm=false # Whether to use word language model.
 # shellcheck disable=SC2034
 word_vocab_size=10000 # Size of word vocabulary.
 
+# Pretrain model related
+pretrain_tag=    # Suffix to the result dir for pretrain model training.
+pretrain_config= # Config for pretrain model training.
+pretrain_args=   # Arguments for pretrain model training, e.g., "--max_epoch 10".
+                 # Note that it will overwrite args in asr config.
+
 # ASR model related
 asr_tag=    # Suffix to the result dir for asr model training.
 asr_config= # Config for asr model training.
@@ -134,6 +140,13 @@ Options:
                       # Note that it will overwrite args in lm config.
     --use_word_lm     # Whether to use word language model (default="${use_word_lm}").
     --word_vocab_size # Size of word vocabulary (default="${word_vocab_size}").
+
+    # Pretrain related
+    --pretrain_tag    # Suffix to the result dir for pretrain model training (default="${pretrain_tag}").
+    --pretrain_config # Config for pretrain model training (default="${pretrain_config}").
+    --pretrain_args   # Arguments for pretrain model training, e.g. "--max_epoch 10" (default="${asr_args}").
+                      # Note that it will overwrite pretrain config.
+    --feats_normalize # Normalization layer type (default="${feats_normalize}").
 
     # ASR model related
     --asr_tag    # Suffix to the result dir for asr model training (default="${asr_tag}").
@@ -242,6 +255,17 @@ if [ -z "${asr_tag}" ]; then
         asr_tag+="$(echo "${asr_args}" | sed -e "s/--/\_/g" -e "s/[ |=]//g")"
     fi
 fi
+if [ -z "${pretrain_tag}" ]; then
+    if [ -n "${pretrain_config}" ]; then
+        pretrain_tag="$(basename "${pretrain_config}" .yaml)_${feats_type}_${token_type}"
+    else
+        pretrain_tag="train_${feats_type}_${token_type}"
+    fi
+    # Add overwritten arg's info
+    if [ -n "${pretrain_args}" ]; then
+        pretrain_tag+="$(echo "${pretrain_args}" | sed -e "s/--/\_/g" -e "s/[ |=]//g")"
+    fi
+fi
 if [ -z "${lm_tag}" ]; then
     if [ -n "${lm_config}" ]; then
         lm_tag="$(basename "${lm_config}" .yaml)_${lm_token_type}"
@@ -273,7 +297,8 @@ fi
 asr_stats_dir="${expdir}/asr_stats"
 lm_stats_dir="${expdir}/lm_stats"
 # The directory used for training commands
-asr_exp="${expdir}/asr_${asr_tag}"
+pretrain_exp="${expdir}/asr_${pretrain_tag}"
+asr_exp="${expdir}/downstream_asr_${asr_tag}"
 lm_exp="${expdir}/lm_${lm_tag}"
 
 # ========================== Main stages start from here. ==========================
@@ -552,7 +577,7 @@ if "${use_lm}"; then
           --log "${lm_exp}"/train.log \
           --ngpu "${ngpu}" \
           --num_nodes "${num_nodes}" \
-          --init_file_prefix "${asr_exp}"/.dist_init_ \
+          --init_file_prefix "${pretrain_exp}"/.dist_init_ \
           --multiprocessing_distributed true -- \
           python3 -m espnet2.bin.lm_train \
               --ngpu "${ngpu}" \
@@ -683,7 +708,73 @@ fi
 if [ ${stage} -le 10 ] && [ ${stop_stage} -ge 10 ]; then
     _asr_train_dir="${data_feats}/${train_set}"
     _asr_dev_dir="${data_feats}/${dev_set}"
-    log "Stage 10: ASR Training: train_set=${_asr_train_dir}, dev_set=${_asr_dev_dir}"
+    log "Stage 10: Pre-Training: train_set=${_asr_train_dir}, dev_set=${_asr_dev_dir}"
+
+    _opts=
+    if [ -n "${asr_config}" ]; then
+        # To generate the config file: e.g.
+        #   % python3 -m espnet2.bin.asr_train --print_config --optim adam
+        _opts+="--config ${asr_config} "
+    fi
+
+    _feats_type="$(<${_asr_train_dir}/feats_type)"
+    if [ "${_feats_type}" = raw ]; then
+        _scp=wav.scp
+        # "sound" supports "wav", "flac", etc.
+        _type=sound
+        _max_length=80000
+        _opts+="--frontend_conf fs=${fs} "
+    else
+        _scp=feats.scp
+        _type=kaldi_ark
+        _max_length=800
+        _input_size="$(<${_asr_train_dir}/feats_dim)"
+        _opts+="--input_size=${_input_size} "
+
+    fi
+    if [ "${feats_normalize}" = global_mvn ]; then
+        # Default normalization is utterance_mvn and changes to global_mvn
+        _opts+="--normalize=global_mvn --normalize_conf stats_file=${asr_stats_dir}/train/feats_stats.npz"
+    fi
+
+    # FIXME(kamo): max_length is confusing name. How about fold_length?
+
+    log "ASR training started... log: '${pretrain_exp}/train.log'"
+    # shellcheck disable=SC2086
+    python3 -m espnet2.bin.launch \
+        --cmd "${train_cmd}" \
+        --log "${pretrain_exp}"/train.log \
+        --ngpu "${ngpu}" \
+        --num_nodes "${num_nodes}" \
+        --init_file_prefix "${pretrain_exp}"/.dist_init_ \
+        --multiprocessing_distributed true -- \
+        python3 -m espnet2.bin.pretrain \
+            --use_preprocessor true \
+            --bpemodel "${bpemodel}" \
+            --token_type "${token_type}" \
+            --token_list "${token_list}" \
+            --non_linguistic_symbols "${nlsyms_txt}" \
+            --train_data_path_and_name_and_type "${_asr_train_dir}/${_scp},speech,${_type}" \
+            --train_data_path_and_name_and_type "${_asr_train_dir}/text,text,text" \
+            --valid_data_path_and_name_and_type "${_asr_dev_dir}/${_scp},speech,${_type}" \
+            --valid_data_path_and_name_and_type "${_asr_dev_dir}/text,text,text" \
+            --train_shape_file "${asr_stats_dir}/train/speech_shape" \
+            --train_shape_file "${asr_stats_dir}/train/text_shape" \
+            --valid_shape_file "${asr_stats_dir}/valid/speech_shape" \
+            --valid_shape_file "${asr_stats_dir}/valid/text_shape" \
+            --resume true \
+            --max_length "${_max_length}" \
+            --max_length 150 \
+            --output_dir "${pretrain_exp}" \
+            ${_opts} ${asr_args}
+
+fi
+
+
+if [ ${stage} -le 11 ] && [ ${stop_stage} -ge 11 ]; then
+    _asr_train_dir="${data_feats}/${train_set}"
+    _asr_dev_dir="${data_feats}/${dev_set}"
+    log "Stage 11: ASR Training: train_set=${_asr_train_dir}, dev_set=${_asr_dev_dir}"
 
     _opts=
     if [ -n "${asr_config}" ]; then
@@ -717,13 +808,13 @@ if [ ${stage} -le 10 ] && [ ${stop_stage} -ge 10 ]; then
     log "ASR training started... log: '${asr_exp}/train.log'"
     # shellcheck disable=SC2086
     python3 -m espnet2.bin.launch \
-        --cmd "${train_cmd}" \
+        --cmd "${cuda_cmd}" \
         --log "${asr_exp}"/train.log \
         --ngpu "${ngpu}" \
         --num_nodes "${num_nodes}" \
         --init_file_prefix "${asr_exp}"/.dist_init_ \
         --multiprocessing_distributed true -- \
-        python3 -m espnet2.bin.pretrain \
+        python3 -m espnet2.bin.asr_train \
             --use_preprocessor true \
             --bpemodel "${bpemodel}" \
             --token_type "${token_type}" \
@@ -738,6 +829,8 @@ if [ ${stage} -le 10 ] && [ ${stop_stage} -ge 10 ]; then
             --valid_shape_file "${asr_stats_dir}/valid/speech_shape" \
             --valid_shape_file "${asr_stats_dir}/valid/text_shape" \
             --resume true \
+            --pretrain_key "encoder" \
+            --pretrain_path "${pretrain_exp}/valid.loss.best.pth" \
             --max_length "${_max_length}" \
             --max_length 150 \
             --output_dir "${asr_exp}" \
@@ -746,8 +839,8 @@ if [ ${stage} -le 10 ] && [ ${stop_stage} -ge 10 ]; then
 fi
 
 
-if [ ${stage} -le 11 ] && [ ${stop_stage} -ge 11 ]; then
-    log "Stage 11: Decoding: training_dir=${asr_exp}"
+if [ ${stage} -le 12 ] && [ ${stop_stage} -ge 12 ]; then
+    log "Stage 12: Decoding: training_dir=${asr_exp}"
 
     if ${gpu_decode}; then
         _cmd=${cuda_cmd}
@@ -819,8 +912,8 @@ if [ ${stage} -le 11 ] && [ ${stop_stage} -ge 11 ]; then
 fi
 
 
-if [ ${stage} -le 12 ] && [ ${stop_stage} -ge 12 ]; then
-    log "Stage 12: Scoring"
+if [ ${stage} -le 13 ] && [ ${stop_stage} -ge 13 ]; then
+    log "Stage 13: Scoring"
 
     for dset in "${dev_set}" ${eval_sets}; do
         _data="${data_feats}/${dset}"
@@ -902,8 +995,8 @@ if [ ${stage} -le 12 ] && [ ${stop_stage} -ge 12 ]; then
 fi
 
 
-if [ ${stage} -le 13 ] && [ ${stop_stage} -ge 13 ]; then
-    log "[Option] Stage 13: Pack model: ${asr_exp}/packed.tgz"
+if [ ${stage} -le 14 ] && [ ${stop_stage} -ge 14 ]; then
+    log "[Option] Stage 14: Pack model: ${asr_exp}/packed.tgz"
 
     _opts=
     if "${use_lm}"; then

@@ -119,15 +119,7 @@ class PRETRAINE2E(AbsE2E):
         text = text[:, : text_lengths.max()]
 
         # 1. Encoder
-
-        
-
-
         encoder_out, encoder_out_lens, mask_label, feats = self.encode(speech, speech_lengths)
-
-
-
-
 
         ## 2a. Attention-decoder branch
         #if self.ctc_weight == 1.0:
@@ -255,16 +247,14 @@ class PRETRAINE2E(AbsE2E):
         # for now, just keep pred_hidden_states
         pred_spec, pred_hidden_states = self.decoder(encoder_out)   # which is Spechead
         loss = torch.nn.L1Loss()
+        # print(mask_label.device)
+        # print(pred_spec.masked_select(mask_label).device)
+        # print(encoder_out_gold.masked_select(mask_label).device)
         masked_spec_loss = loss(pred_spec.masked_select(mask_label),
                 encoder_out_gold.masked_select(mask_label))
-        
+         
         # you could add more items to return
         return masked_spec_loss
-
-
-
-    
-    
     
     
     
