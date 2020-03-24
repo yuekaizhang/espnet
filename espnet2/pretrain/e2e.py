@@ -105,7 +105,7 @@ class PRETRAINE2E(AbsE2E):
             text: (Batch, Length)
             text_lengths: (Batch,)
         """
-        assert text_lengths.dim() == 1, text_lengths.shape
+        assert text_lengths.dim() == 1, text_lengths.shape  # what's .dim() for?
         # Check that batch_size is unified
         assert (
             speech.shape[0]
@@ -116,14 +116,22 @@ class PRETRAINE2E(AbsE2E):
         batch_size = speech.shape[0]
 
         # for data-parallel
+        #print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        #print(text.shape)
+        #print(text[0,:])
         text = text[:, : text_lengths.max()]
+        #print(text.shape)
+        #print(text[2,:])
+
+
+        #TO DO: modify code in transformer_encoder, modify code in transformer_decoder
 
         # 1. Encoder
 
         
 
 
-        encoder_out, encoder_out_lens, mask_label, feats = self.encode(speech, speech_lengths)
+        encoder_out, encoder_out_lens, spectrogram_out_lens,text_out_lens,feats_mask, text_mask,feats_gold,text_gold = self.encode(speech, speech_lengths,text,text_lengths)
 
 
 
@@ -158,7 +166,7 @@ class PRETRAINE2E(AbsE2E):
 
         # compute loss here
 
-        loss = self._calc_reconstruction_loss(encoder_out,encoder_out_lens,mask_label,feats)
+        loss = self._calc_reconstruction_loss(encoder_out,encoder_out_lens,spectrogram_out_lens, text_out_lens, feats_mask, text_mask, feats_gold, text_gold)
 
 
         stats = dict(
@@ -186,15 +194,20 @@ class PRETRAINE2E(AbsE2E):
         return {"feats": feats, "feats_lengths": feats_lengths}
 
     def encode(
-        self, speech: torch.Tensor, speech_lengths: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+            self, speech: torch.Tensor, speech_lengths: torch.Tensor,text:torch.Tensor, text_lengths:torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """Frontend + Encoder. Note that this method is used by asr_decode.py
 
         Args:
             speech: (Batch, Length, ...)
             speech_lengths: (Batch, )
+            text: (Batch,Length,...)
+            text_lengths: (Batch, )
         """
         # 1. Extract feats
+
+
+        # change this if you want to other features, cqcc
         feats, feats_lengths = self._extract_feats(speech, speech_lengths)
 
         # 2. Normalization for feature: e.g. Global-CMVN, Utterance-CMVN
@@ -204,26 +217,45 @@ class PRETRAINE2E(AbsE2E):
         # 3. Forward encoder
         # feats: (Batch, Length, Dim)
         # -> encoder_out: (Batch, Length2, Dim2)
-
-
-        #feats_masked,mask_label = process_train_MAM_data(feats,config=None)
-
-
-        encoder_out, encoder_out_lens,mask_label,encoder_out_gold, _ = self.encoder(feats, feats_lengths)
+        text = torch.unsqueeze(text,2)
         
+        feats_gold = feats
+        text_gold = text
+
+        #print(text.shape)
+        #print(feats.shape)
+        #print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+        feats_masked,feats_mask = process_train_MAM_data(feats,20,config=None) # consecutive length is 20
+        text_masked,text_mask = process_train_MAM_data(text,1,config=None) # TO DO: modify the function to fit text
+        feats_mask = feats_mask.cuda()
+        text_mask = text_mask.cuda()
+        #text_masked = torch.squeeze(text_masked,-1)
+        #text_mask = torch.squeeze(text_mask,-1)
+        #text_masked, ys_out_pad = add_sos_eos(text_masked, self.sos, self.eos, self.ignore_id)
+        # keep the vocab size same for text embedding layer
+        #print(feats_mask.shape)
+        #print(text_mask.shape)
+        #print(text_masked.shape)
+        #print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+        encoder_out, encoder_out_lens,speech_out_lens,text_out_lens = self.encoder(feats_masked, feats_lengths, text_masked,text_lengths)
+        
+        #print(f"{speech_out_lens}{speech_out_lens.shape}")
+        #assert speech_out_lens + text_out_lens == encoder_out_lens
         
 
         assert encoder_out.size(0) == speech.size(0), (
             encoder_out.size(),
             speech.size(0),
         )
-        assert encoder_out.size(1) <= encoder_out_lens.max(), (
-            encoder_out.size(),
-            encoder_out_lens.max(),
-        )
+        #AssertionError: (torch.Size([32, 284, 256]), tensor(283)), it's very wired
+        #assert encoder_out.size(1) <= encoder_out_lens.max(), (
+        #    encoder_out.size(),
+        #    encoder_out_lens.max(),
+        #)
+
+
         
-        # add return mask_label, feats
-        return encoder_out, encoder_out_lens, mask_label, encoder_out_gold
+        return encoder_out, encoder_out_lens, speech_out_lens, text_out_lens, feats_mask, text_mask, feats_gold, text_gold
 
     def _extract_feats(
         self, speech: torch.Tensor, speech_lengths: torch.Tensor
@@ -248,18 +280,32 @@ class PRETRAINE2E(AbsE2E):
         self,
         encoder_out: torch.Tensor,
         encoder_out_lens: torch.Tensor,
-        mask_label,
-        encoder_out_gold: torch.Tensor,
-    ):  
-
-        # for now, just keep pred_hidden_states
-        pred_spec, pred_hidden_states = self.decoder(encoder_out)   # which is Spechead
-        loss = torch.nn.L1Loss()
-        masked_spec_loss = loss(pred_spec.masked_select(mask_label),
-                encoder_out_gold.masked_select(mask_label))
+        feats_out_lens,
+        text_out_lens, #useless for now 
+        feats_mask,
+        text_mask,
+        feats_gold,
+        text_gold,
         
-        # you could add more items to return
-        return masked_spec_loss
+    ):  
+        speech_len = feats_gold.shape[1]
+        text_len = text_gold.shape[1]
+        assert speech_len + text_len == encoder_out.shape[1]
+
+
+        # by Yuekai, TO DO: implemented this 
+        pred_feats,pred_text = self.decoder(encoder_out,encoder_out_lens,speech_len,text_len)   
+        loss = torch.nn.L1Loss()
+        masked_spec_loss = loss(pred_feats.masked_select(feats_mask),
+                feats_gold.masked_select(feats_mask))
+         
+        #print(pred_text.masked_select(text_mask).dtype)
+        #print(text_gold.masked_select(text_mask).to(torch.float32).dtype)
+        masked_text_loss = loss(pred_text.masked_select(text_mask),
+                text_gold.masked_select(text_mask).to(torch.float32))
+        
+        print(f"The current spec_loss:{masked_spec_loss}, text_loss: {masked_text_loss}")
+        return masked_spec_loss + 0.1 * masked_text_loss  # TO DO: tune this !!
 
 
 

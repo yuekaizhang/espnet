@@ -60,11 +60,48 @@ class PretrainDecoder(AbsDecoder):
             self.decoder += [
                 torch.nn.Linear(self.dunits, self.dunits)
             ]
+        self.feats_decoder = torch.nn.Sequential(
+                torch.nn.Linear(256, self.odim),
+                torch.nn.LayerNorm(self.odim),
+                torch.nn.Dropout(self.dropout),
+                torch.nn.ReLU(),
+        )
+        self.text_decoder = torch.nn.Sequential(
+                torch.nn.Linear(256, 1),
+        )
         #self.output = torch.nn.Linear(self.dunits, self.odim * self.downsample_rate)
 
 
-    def forward(self, hidden_states):
+    def forward(self, encoder_out,encoder_out_lens,speech_len,text_len):
+        #print(encoder_out.shape)
+        
 
+        #print(encoder_out_lens) # why some 314, others 313?
+        
+        #print("____________________________________________++++++++++++++++")
+        #print(self.dropout)
+        #print(text_out_lens)
+
+        
+        
+        feats_output,text_output = encoder_out[:, :speech_len, :], \
+                encoder_out[:,speech_len:,:]
+        assert text_output.shape[1] == text_len
+
+        #feats_decoder = torch.nn.Sequential(
+        #        torch.nn.Linear(encoder_out.shape[-1], self.odim),
+        #        torch.nn.LayerNorm(self.odim),
+        #        torch.nn.Dropout(self.dropout),
+        #        torch.nn.ReLU(),
+        #)
+
+        #text_decoder = torch.nn.Sequential(
+        #        torch.nn.Linear(encoder_out.shape[-1], 1),
+        #)
+
+
+        pred_feats = self.feats_decoder(feats_output)
+        pred_text = self.text_decoder(text_output)
         # for l in range(self.dlayers):
         #     hidden_states = self.layer_norm(
         #                         self.activation(
@@ -72,4 +109,4 @@ class PretrainDecoder(AbsDecoder):
         # linear_output = self.output(hidden_states)
         # return linear_output, hidden_states
         # just keep the format (yuekai)
-        return hidden_states,hidden_states
+        return pred_feats, pred_text

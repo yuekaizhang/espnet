@@ -2,7 +2,7 @@
 # encoder related
 encoder: transformer
 encoder_conf:
-    input_layer: conv2d
+    input_layer: pretrain
     num_blocks: 12
     linear_units: 2048
     dropout_rate: 0.1

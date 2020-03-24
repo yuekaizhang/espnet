@@ -9,7 +9,7 @@ import numpy as np
 MASK_PROPORTION = 0.15
 MASK_CONSECUTIVE = 20 # 7
 
-def process_train_MAM_data(spec,config=None):
+def process_train_MAM_data(spec,mask_consecutive,config=None):
     """
     input: feats i.e. fbank (Batch,Length,Dim)
     output: feats_masked: feats with the selected frames processed \
@@ -17,7 +17,7 @@ def process_train_MAM_data(spec,config=None):
             mask_label: (Batch,Length) with indices selected in [1, 0], 1 means masked feature
     """
     mask_proportion = MASK_PROPORTION
-    mask_consecutive = MASK_CONSECUTIVE
+    #mask_consecutive = MASK_CONSECUTIVE
     
     
     mask_label = np.zeros_like(spec.detach().cpu()) # by Yuekai
@@ -51,6 +51,7 @@ def process_train_MAM_data(spec,config=None):
         mask_label = torch.ByteTensor(mask_label).to(dtype=torch.uint8)
         spec = spec.to(dtype=torch.float32)
 
-    return spec_masked, mask_label.cuda()
+    return spec_masked, mask_label
+    #return spec_masked, mask_label.cuda()
 
 

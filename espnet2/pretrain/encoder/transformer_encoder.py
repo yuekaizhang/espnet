@@ -51,6 +51,7 @@ class TransformerEncoder(AbsEncoder):
     def __init__(
         self,
         input_size: int,
+        vocab_size: int,
         output_size: int = 256,
         attention_heads: int = 4,
         linear_units: int = 2048,
@@ -70,6 +71,10 @@ class TransformerEncoder(AbsEncoder):
         super().__init__()
         self._output_size = output_size
 
+        vocab_size -= 2 # remove eos, sos
+        #input_size = torch.tensor(input_size, dtype=torch.long)
+        
+        
         if input_layer == "linear":
             self.embed = torch.nn.Sequential(
                 torch.nn.Linear(input_size, output_size),
@@ -80,6 +85,30 @@ class TransformerEncoder(AbsEncoder):
             )
         elif input_layer == "conv2d":
             self.embed = Conv2dSubsampling(input_size, output_size, dropout_rate)
+        # by yuekai
+        elif input_layer == "pretrain":
+            self.embed = torch.nn.Sequential(
+                #torch.nn.Embedding(input_size, output_size, padding_idx=padding_idx),
+                torch.nn.Linear(input_size, output_size),
+                torch.nn.LayerNorm(output_size),
+                torch.nn.Dropout(dropout_rate),
+                torch.nn.ReLU(),
+                pos_enc_class(output_size, positional_dropout_rate),
+                #type_enc_class(output_size,type_nums),
+            )
+            attention_dim = output_size
+            #print("input_size：！")
+            #print(input_size)
+            self.text_embed = torch.nn.Sequential(
+                #torch.nn.Embedding(vocab_size, output_size),
+                torch.nn.Linear(1, attention_dim),
+                torch.nn.LayerNorm(attention_dim),
+                torch.nn.Dropout(dropout_rate),
+                torch.nn.ReLU(),
+                pos_enc_class(output_size, positional_dropout_rate),
+                #type_enc_class(output_size,type_nums),  for now, don't use type_enc
+            )
+
         elif input_layer == "embed":
             self.embed = torch.nn.Sequential(
                 torch.nn.Embedding(input_size, output_size, padding_idx=padding_idx),
@@ -140,6 +169,8 @@ class TransformerEncoder(AbsEncoder):
         self,
         xs_pad: torch.Tensor,
         ilens: torch.Tensor,
+        text_pad: torch.Tensor,
+        textlens: torch.Tensor,
         prev_states: torch.Tensor = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         """Embed positions in tensor.
@@ -152,24 +183,47 @@ class TransformerEncoder(AbsEncoder):
             position embedded tensor and mask
         """
         masks = (~make_pad_mask(ilens)[:, None, :]).to(xs_pad.device)
-        
+        text_masks = (~make_pad_mask(textlens)[:, None, :]).to(text_pad.device)
 
         if isinstance(self.embed, Conv2dSubsampling):
             xs_pad, masks = self.embed(xs_pad, masks)
         else:
+            #xs_pad = torch.tensor(xs_pad, dtype=torch.long)
             xs_pad = self.embed(xs_pad)
+        #text_pad = torch.tensor(text_pad, dtype=torch.long)
+        
+        
+        #print(xs_pad.shape)
+        #print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+        text_pad = self.text_embed(text_pad)
+        #print(text_pad.shape)
+        assert xs_pad.shape[0] == text_pad.shape[0]
+        assert xs_pad.shape[2] == text_pad.shape[2]
+        #print(xs_pad.shape)
+        #print(masks.shape)
+        #print(text_masks.shape)
+
+        xs_pad = torch.cat((xs_pad, text_pad), 1)
+
+        #print(xs_pad.shape)
+        feats_out_lens = masks.squeeze(1).sum(1)
+        text_out_lens = text_masks.squeeze(1).sum(1)
+
+        #assert masks.shape[2] == text_masks.shape[0]
+        masks = torch.cat((masks, text_masks), 2)
+        #print(masks.shape)
         
         # by yuekai
-        encoder_out_gold = xs_pad
-        xs_pad,mask_label = process_train_MAM_data(xs_pad,config=None)
+        #encoder_out_gold = xs_pad
+        #xs_pad,mask_label = process_train_MAM_data(xs_pad,config=None)
         # xs_pad already been masked
         
         xs_pad, masks = self.encoders(xs_pad, masks)
         
-        assert xs_pad.shape ==encoder_out_gold.shape
+        #assert xs_pad.shape ==encoder_out_gold.shape
         
         if self.normalize_before:
             xs_pad = self.after_norm(xs_pad)
 
         olens = masks.squeeze(1).sum(1)
-        return xs_pad, olens, mask_label, encoder_out_gold, None
+        return xs_pad, olens, feats_out_lens, text_out_lens

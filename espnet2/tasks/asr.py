@@ -252,7 +252,7 @@ class ASRTask(AbsTask):
 
         # 3. Encoder
         encoder_class = encoder_choices.get_class(args.encoder)
-        encoder = encoder_class(input_size=input_size, **args.encoder_conf)
+        encoder = encoder_class(input_size=input_size,vocab_size = vocab_size, **args.encoder_conf)
 
         # 4. Decoder
         decoder_class = decoder_choices.get_class(args.decoder)

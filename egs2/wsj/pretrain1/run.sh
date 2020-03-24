@@ -11,11 +11,13 @@ eval_sets="test_eval92 "
 
 asr_config=conf/train_transformer.yaml
 
+ngpu=0
+
 ./pretrain.sh \
     --stage 10 \
     --stop_stage 10 \
     --nbpe 5000 \
-    --ngpu 0 \
+    --ngpu ${ngpu} \
     --token_type char \
     --feats_type fbank_pitch \
     --use_lm false \
