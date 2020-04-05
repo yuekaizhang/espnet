@@ -12,6 +12,10 @@ from espnet.nets.pytorch_backend.transducer.vgg import VGG2L
 
 from espnet.nets.pytorch_backend.transformer.attention import MultiHeadedAttention
 from espnet.nets.pytorch_backend.transformer.embedding import PositionalEncoding
+
+from espnet.nets.pytorch_backend.transformer.embedding import TypeEncoding
+
+
 from espnet.nets.pytorch_backend.transformer.encoder_layer import EncoderLayer
 from espnet.nets.pytorch_backend.transformer.layer_norm import LayerNorm
 from espnet.nets.pytorch_backend.transformer.multi_layer_conv import Conv1dLinear
@@ -60,6 +64,8 @@ class Encoder(torch.nn.Module):
                  padding_idx=-1):
         """Construct an Encoder object."""
         super(Encoder, self).__init__()
+        
+        type_enc_class = TypeEncoding
 
         if input_layer == "linear":
             self.embed = torch.nn.Sequential(
@@ -91,17 +97,16 @@ class Encoder(torch.nn.Module):
                     torch.nn.LayerNorm(attention_dim),
                     torch.nn.Dropout(dropout_rate),
                     torch.nn.ReLU(),
-                    pos_enc_class(attention_dim, positional_dropout_rate)
-                    # TO DO:
-                    # type_enc_class(output_size,type_nums)
+                    pos_enc_class(attention_dim, positional_dropout_rate),
+                    type_enc_class(attention_dim,1)
             )
             self.text_embed = torch.nn.Sequential(
                     torch.nn.Linear(1,attention_dim),
                     torch.nn.LayerNorm(attention_dim),
                     torch.nn.Dropout(dropout_rate),
                     torch.nn.ReLU(),
-                    pos_enc_class(attention_dim, positional_dropout_rate)
-                    #type_enc_class(output_size,type_nums)
+                    pos_enc_class(attention_dim, positional_dropout_rate),
+                    type_enc_class(attention_dim,0)   # how to choose the type_enc_class? 
             )
         
         elif input_layer is None:
@@ -145,22 +150,24 @@ class Encoder(torch.nn.Module):
         :rtype Tuple[torch.Tensor, torch.Tensor]:
         """
         #text_masks = make_non_pad_mask(textlens.tolist()).to(ys_pad.device).unsqueeze(-2)
-        print(masks.shape)
+        #print(masks.shape)
         text_masks = ys_pad!=ignore_id
-        print(text_masks.shape)
-        input()
+        text_masks = text_masks.permute(0, 2, 1)
+        #print(text_masks.shape)
 
 
         if isinstance(self.embed, (Conv2dSubsampling, VGG2L)):
             xs, masks = self.embed(xs, masks)
         else:
             xs = self.embed(xs)
-        text_pad = self.text_embed(ys_pad)
+        text_pad = self.text_embed(ys_pad.float())   # text is long tensor??
         assert xs.shape[0] == text_pad.shape[0]
         assert xs.shape[2] == text_pad.shape[2]
         
         xs = torch.cat((xs,text_pad),1)
         masks = torch.cat((masks,text_masks),2)
+
+        #print(masks.shape)
         
         xs, masks = self.encoders(xs, masks)
         

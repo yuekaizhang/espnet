@@ -53,6 +53,7 @@ class Decoder(ScorerInterface, torch.nn.Module):
                  concat_after=False):
         """Construct an Decoder object."""
         torch.nn.Module.__init__(self)
+        odim = 83 # TO DO: figure out why odim == 52 ??
         if input_layer == "embed":
             self.embed = torch.nn.Sequential(
                 torch.nn.Embedding(odim, attention_dim),
@@ -94,11 +95,12 @@ class Decoder(ScorerInterface, torch.nn.Module):
             self.output_layer = None
 
         self.feats_decoder = torch.nn.Sequential(
-                torch.nn.Linear(attention_dim,odim)
-                torch.nn.LayerNorm(odim)
-                torch.nn.Dropout(dropout_rate)
-                torch.nn.Relu(),
+                torch.nn.Linear(attention_dim,odim),    # why odim is 52?
+                torch.nn.LayerNorm(odim),
+                torch.nn.Dropout(dropout_rate),
+                torch.nn.ReLU(),
         )
+
         self.text_decoder = torch.nn.Sequential(
                 torch.nn.Linear(attention_dim,1),
         )

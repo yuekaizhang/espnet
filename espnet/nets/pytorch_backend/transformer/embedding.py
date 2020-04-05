@@ -110,3 +110,29 @@ class ScaledPositionalEncoding(PositionalEncoding):
         self.extend_pe(x)
         x = x + self.alpha * self.pe[:, :x.size(1)]
         return self.dropout(x)
+
+
+class TypeEncoding(torch.nn.Module):
+
+    def __init__(self, d_model, type_num, max_len=5000):
+        super(TypeEncoding, self).__init__()
+        self.d_model = d_model
+        self.pe = None
+        self.type_num = type_num
+        self.extend_pe(torch.tensor(0.0).expand(1, max_len))
+        self._register_load_state_dict_pre_hook(_pre_hook)
+
+    def extend_pe(self,x):
+        if self.pe is not None:
+            if self.pe.size(1) >= x.size(1):
+                if self.pe.dtype != x.dtype or self.pe.device != x.device:
+                    self.pe = self.pe.to(dtype=x.dtype, device=x.device)
+                return
+        pe = torch.ones(x.size(1), self.d_model) * self.type_num
+        pe = pe.unsqueeze(0)
+        self.pe = pe.to(device=x.device, dtype=x.dtype)
+
+    def forward(self,x:torch.Tensor):
+        self.extend_pe(x)
+        x = x + self.pe[:, :x.size(1)]
+        return x

@@ -20,8 +20,12 @@ from espnet.nets.pytorch_backend.nets_utils import make_non_pad_mask
 from espnet.nets.pytorch_backend.nets_utils import th_accuracy
 from espnet.nets.pytorch_backend.transformer.add_sos_eos import add_sos_eos
 from espnet.nets.pytorch_backend.transformer.attention import MultiHeadedAttention
-from espnet.nets.pytorch_backend.transformer.decoder import Decoder
-from espnet.nets.pytorch_backend.transformer.encoder import Encoder
+
+
+from espnet.nets.pytorch_backend.transformer.decoder_pretrain import Decoder
+from espnet.nets.pytorch_backend.transformer.encoder_pretrain import Encoder
+from espnet.utils.pretrain_utils import process_train_MAM_data
+
 from espnet.nets.pytorch_backend.transformer.initializer import initialize
 from espnet.nets.pytorch_backend.transformer.label_smoothing_loss import LabelSmoothingLoss
 from espnet.nets.pytorch_backend.transformer.mask import subsequent_mask
@@ -49,7 +53,7 @@ class E2E(ASRInterface, torch.nn.Module):
                                     "kaiming_uniform", "kaiming_normal"],
                            help='how to initialize transformer parameters')
         group.add_argument("--transformer-input-layer", type=str, default="conv2d",
-                           choices=["conv2d", "linear", "embed"],
+                           choices=["conv2d", "linear", "embed","pretrain"],
                            help='transformer input layer type')
         group.add_argument('--transformer-attn-dropout-rate', default=None, type=float,
                            help='dropout in transformer attention. use --dropout-rate if None is set')
@@ -77,6 +81,10 @@ class E2E(ASRInterface, torch.nn.Module):
                            help='Number of decoder layers')
         group.add_argument('--dunits', default=320, type=int,
                            help='Number of decoder hidden units')
+        
+        group.add_argument('--pretrain', default=True, type=bool,
+                           help='pretrain flag')
+        
         return parser
 
     @property
@@ -143,6 +151,7 @@ class E2E(ASRInterface, torch.nn.Module):
         else:
             self.error_calculator = None
         self.rnnlm = None
+        self.pretrain=args.pretrain
 
     def reset_parameters(self, args):
         """Initialize parameters."""
@@ -165,19 +174,61 @@ class E2E(ASRInterface, torch.nn.Module):
         # 1. forward encoder
         xs_pad = xs_pad[:, :max(ilens)]  # for data parallel
         src_mask = make_non_pad_mask(ilens.tolist()).to(xs_pad.device).unsqueeze(-2)
-        hs_pad, hs_mask = self.encoder(xs_pad, src_mask)
+
+
+        
+        # ?? ys_pad = ys_pad[:,:max()]
+        #print(xs_pad.shape)
+        #print(ys_pad.shape)
+        ys_pad = torch.unsqueeze(ys_pad,2)
+        #print(ys_pad.shape)
+
+        xs_pad_masked,feats_mask = process_train_MAM_data(xs_pad,20,config=None)
+        ys_pad_masked,text_mask = process_train_MAM_data(ys_pad,1,config=None)
+        feats_mask = feats_mask.cuda()
+        text_mask = text_mask.cuda()
+
+
+        if not self.pretrain:
+            hs_pad, hs_mask = self.encoder(xs_pad, src_mask)
+        else:
+            hs_pad,hs_mask = self.encoder(xs_pad,src_mask,ys_pad,self.ignore_id)
+            
         self.hs_pad = hs_pad
 
         # 2. forward decoder
-        ys_in_pad, ys_out_pad = add_sos_eos(ys_pad, self.sos, self.eos, self.ignore_id)
-        ys_mask = target_mask(ys_in_pad, self.ignore_id)
-        pred_pad, pred_mask = self.decoder(ys_in_pad, ys_mask, hs_pad, hs_mask)
-        self.pred_pad = pred_pad
+        #ys_in_pad, ys_out_pad = add_sos_eos(ys_pad, self.sos, self.eos, self.ignore_id)
+        #ys_mask = target_mask(ys_in_pad, self.ignore_id)
+        
+        #pred_pad, pred_mask = self.decoder(ys_in_pad, ys_mask, hs_pad, hs_mask)
+        
+        # TO DO: add sos and eos for text pretrain
+        feats_len = xs_pad.shape[1]
+        text_len = ys_pad.shape[1]
+        assert feats_len + text_len == hs_pad.shape[1]
+        hs_pad_feats,hs_pad_text = hs_pad[:,:feats_len,:],hs_pad[:,feats_len:,:]
 
+        pred_pad_feats,pred_pad_text = self.decoder(hs_pad_feats,hs_pad_text)
+        
+        #self.pred_pad = pred_pad
+        myloss = torch.nn.L1Loss()
+        print(pred_pad_feats.shape)
+        print(feats_mask.shape)
+        masked_feats_loss = myloss(pred_pad_feats.masked_select(feats_mask),\
+                xs_pad.masked_select(feats_mask))
+        
+        ys_pad = ys_pad.float()  # original is long tensor
+        masked_text_loss = myloss(pred_pad_text.masked_select(text_mask),\
+                ys_pad.masked_select(text_mask))
+
+        loss_pretrain = masked_feats_loss + masked_text_loss
+        print(f"Feats loss:{masked_feats_loss}, text loss:{masked_text_loss}")
+        print(f"loss:{loss_pretrain}")
+        
         # 3. compute attention loss
-        loss_att = self.criterion(pred_pad, ys_out_pad)
-        self.acc = th_accuracy(pred_pad.view(-1, self.odim), ys_out_pad,
-                               ignore_label=self.ignore_id)
+        #loss_att = self.criterion(pred_pad, ys_out_pad)
+        #self.acc = th_accuracy(pred_pad.view(-1, self.odim), ys_out_pad,
+        #                       ignore_label=self.ignore_id)
 
         # TODO(karita) show predicted text
         # TODO(karita) calculate these stats
@@ -187,36 +238,40 @@ class E2E(ASRInterface, torch.nn.Module):
         else:
             batch_size = xs_pad.size(0)
             hs_len = hs_mask.view(batch_size, -1).sum(1)
-            loss_ctc = self.ctc(hs_pad.view(batch_size, -1, self.adim), hs_len, ys_pad)
-            if self.error_calculator is not None:
-                ys_hat = self.ctc.argmax(hs_pad.view(batch_size, -1, self.adim)).data
-                cer_ctc = self.error_calculator(ys_hat.cpu(), ys_pad.cpu(), is_ctc=True)
+            #loss_ctc = self.ctc(hs_pad.view(batch_size, -1, self.adim), hs_len, ys_pad)
+            #if self.error_calculator is not None:
+            #    ys_hat = self.ctc.argmax(hs_pad.view(batch_size, -1, self.adim)).data
+            #    cer_ctc = self.error_calculator(ys_hat.cpu(), ys_pad.cpu(), is_ctc=True)
 
         # 5. compute cer/wer
         if self.training or self.error_calculator is None:
             cer, wer = None, None
-        else:
-            ys_hat = pred_pad.argmax(dim=-1)
-            cer, wer = self.error_calculator(ys_hat.cpu(), ys_pad.cpu())
+        #else:
+            #ys_hat = pred_pad.argmax(dim=-1)
+            #cer, wer = self.error_calculator(ys_hat.cpu(), ys_pad.cpu())
 
         # copyied from e2e_asr
-        alpha = self.mtlalpha
-        if alpha == 0:
-            self.loss = loss_att
-            loss_att_data = float(loss_att)
-            loss_ctc_data = None
-        elif alpha == 1:
-            self.loss = loss_ctc
-            loss_att_data = None
-            loss_ctc_data = float(loss_ctc)
-        else:
-            self.loss = alpha * loss_ctc + (1 - alpha) * loss_att
-            loss_att_data = float(loss_att)
-            loss_ctc_data = float(loss_ctc)
-
+        #alpha = self.mtlalpha
+        #if alpha == 0:
+        #    self.loss = loss_att
+        #    loss_att_data = float(loss_att)
+        #    loss_ctc_data = None
+        #elif alpha == 1:
+        #    self.loss = loss_ctc
+        #    loss_att_data = None
+        #    loss_ctc_data = float(loss_ctc)
+        #else:
+        #    self.loss = alpha * loss_ctc + (1 - alpha) * loss_att
+        #    loss_att_data = float(loss_att)
+        #    loss_ctc_data = float(loss_ctc)
+        loss_ctc_data = float(masked_feats_loss)
+        loss_att_data = float(masked_text_loss)
+        
+        
+        self.loss = loss_pretrain
         loss_data = float(self.loss)
         if loss_data < CTC_LOSS_THRESHOLD and not math.isnan(loss_data):
-            self.reporter.report(loss_ctc_data, loss_att_data, self.acc, cer_ctc, cer, wer, loss_data)
+            self.reporter.report(loss_ctc_data, loss_att_data, loss_data, loss_data, loss_data, loss_data, loss_data)
         else:
             logging.warning('loss (=%f) is not correct', loss_data)
         return self.loss
