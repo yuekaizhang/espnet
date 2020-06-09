@@ -14,7 +14,10 @@ from espnet.nets.pytorch_backend.nets_utils import make_non_pad_mask
 from espnet.nets.pytorch_backend.nets_utils import to_device
 from espnet.nets.pytorch_backend.nets_utils import to_torch_tensor
 from espnet.nets.pytorch_backend.rnn.attentions import att_for
-from espnet.nets.pytorch_backend.rnn.encoders import encoder_for
+
+#from espnet.nets.pytorch_backend.rnn.encoders import encoder_for
+from espnet.nets.pytorch_backend.tdnn.tdnn import encoder_for
+
 from espnet.nets.pytorch_backend.transducer.initializer import initializer
 from espnet.nets.pytorch_backend.transducer.loss import TransLoss
 from espnet.nets.pytorch_backend.transducer.rnn_decoders import decoder_for
@@ -115,6 +118,9 @@ class E2E(ASRInterface, torch.nn.Module):
             help="Subsample input frames x_y_z means subsample every x frame "
             "at 1st layer, every y frame at 2nd layer etc.",
         )
+        # Encoder - TDNN
+        # TO DO: add TDNN papams
+
         # Attention - general
         group.add_argument(
             "--adim",
@@ -307,11 +313,13 @@ class E2E(ASRInterface, torch.nn.Module):
                 positional_dropout_rate=args.dropout_rate,
                 attention_dropout_rate=args.transformer_attn_dropout_rate_encoder,
             )
-        else:
+        elif args.etype != "tdnn":
             self.subsample = get_subsample(args, mode="asr", arch="rnn-t")
-
             self.enc = encoder_for(args, idim, self.subsample)
-            # TO DO: change for tdnn
+
+        else:
+            assert args.etype == "tdnn"
+            self.enc = encoder_for(args, idim)
 
         if args.dtype == "transformer":
             self.decoder = Decoder(
@@ -326,6 +334,7 @@ class E2E(ASRInterface, torch.nn.Module):
                 positional_dropout_rate=args.dropout_rate_decoder,
                 attention_dropout_rate=args.transformer_attn_dropout_rate_decoder,
             )
+    
         else:
             if args.etype == "transformer":
                 args.eprojs = args.adim
@@ -394,10 +403,12 @@ class E2E(ASRInterface, torch.nn.Module):
             src_mask = make_non_pad_mask(ilens.tolist()).to(xs_pad.device).unsqueeze(-2)
 
             hs_pad, hs_mask = self.encoder(xs_pad, src_mask)
-        else:
+        elif self.etype == "tdnn":
             #print(f"The shape of xs_pad, ilens, hs_pad, hs_mask")
-            hs_pad, hs_mask, _ = self.enc(xs_pad, ilens)
+            hs_pad, hs_mask = self.enc(xs_pad, ilens)
             #print(f"{hs_pad.shape} {hs_mask.shape} {xs_pad.shape} {ilens.shape}")
+        else:
+            hs_pad, hs_mask, _ = self.enc(xs_pad, ilens)
         self.hs_pad = hs_pad
 
         # 1.5. transducer preparation related
@@ -474,6 +485,10 @@ class E2E(ASRInterface, torch.nn.Module):
 
         return h[0]
 
+    def encode_tdnn(self,x):
+        pass
+        # TO DO
+
     def recognize(self, x, recog_args, char_list=None, rnnlm=None):
         """Recognize input features.
 
@@ -489,6 +504,8 @@ class E2E(ASRInterface, torch.nn.Module):
         """
         if self.etype == "transformer":
             h = self.encode_transformer(x)
+        elif self.etype == "tdnn":
+            h = self.encode_tdnn(x)
         else:
             h = self.encode_rnn(x)
         params = [h, recog_args]
