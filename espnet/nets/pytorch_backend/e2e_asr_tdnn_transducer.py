@@ -107,10 +107,11 @@ class E2E(ASRInterface, torch.nn.Module):
             type=float,
             help="Dropout rate for the encoder",
         )
-        # Encoder - RNN
+        # Encoder - RNN, TDNN
         group.add_argument(
             "--eprojs", default=320, type=int, help="Number of encoder projection units"
-        )
+        ) 
+        # For tdnn, using 320 now, original num of nnet output, e.g. 100 pdf-ids
         group.add_argument(
             "--subsample",
             default="1",
@@ -120,7 +121,34 @@ class E2E(ASRInterface, torch.nn.Module):
         )
         # Encoder - TDNN
         # TO DO: add TDNN papams
-
+        group.add_argument(
+            "--tdnn-hdim",
+            default=[256,512,512,512,512],
+            type=int,
+            nargs='+',
+            help="Output dimensions for each hidden layer ",
+        )
+        group.add_argument(
+            "--kernel-sizes",
+            default=[3,3,3,3,3],
+            type=int,
+            nargs='+',
+            help="kernel sizes for each layers in TDNN",
+        )
+        group.add_argument(
+            "--dilations", 
+            default=[1,1,3,3,3], 
+            type=int, 
+            nargs='+',
+            help="dilations for tdnn"
+        )
+        group.add_argument(
+            "--strides", 
+            default=[1,1,1,1,3], 
+            type=int, 
+            nargs='+',
+            help="strides for tdnn"
+        )
         # Attention - general
         group.add_argument(
             "--adim",
@@ -313,13 +341,15 @@ class E2E(ASRInterface, torch.nn.Module):
                 positional_dropout_rate=args.dropout_rate,
                 attention_dropout_rate=args.transformer_attn_dropout_rate_encoder,
             )
-        elif args.etype != "tdnn":
+        elif args.etype == "tdnn":
             self.subsample = get_subsample(args, mode="asr", arch="rnn-t")
+            assert args.etype == "tdnn"
+            # TO DO: organize args
             self.enc = encoder_for(args, idim, self.subsample)
 
         else:
-            assert args.etype == "tdnn"
-            self.enc = encoder_for(args, idim)
+            self.subsample = get_subsample(args, mode="asr", arch="rnn-t")
+            self.enc = encoder_for(args, idim,self.subsample)
 
         if args.dtype == "transformer":
             self.decoder = Decoder(

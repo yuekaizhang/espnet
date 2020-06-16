@@ -7,18 +7,24 @@ maxlen-out: 150
 criterion: loss
 early-stop-criterion: "validation/main/loss"
 sortagrad: 0
-opt: adadelta
+opt: adam
+#opt: adadelta
 epochs: 20
 patience: 3
 
 # network architecture
 ## encoder related
 etype: tdnn
-elayers: 4  # FIX ME
+elayers: 9  # FIX ME
+tdnn-hdim: [512,512,512,512,512,512,512,512,512]
+kernel-sizes: [3,3,3,3,3,3,3,3,3]
+dilations: [1,1,1,3,3,3,3,3,3]
+strides: [1,1,1,1,1,1,3,3,3]
 #eunits: 320
-eprojs: 320
-subsample: "1_1_1_1_1"
+eprojs: 320 # for tdnn, using 100? num of pdf-ids
+#subsample: "1_1_1_1_1" # not used for tdnn
 #dropout-rate: 0.4
+
 ## decoder related
 dtype: lstm
 dlayers: 1
@@ -40,3 +46,8 @@ joint-dim: 256
 mtlalpha: 1.0 # mtlalpha should be set to 1.0 (CTC) to use transducer
 rnnt-mode: 'rnnt' # switch to 'rnnt-att' to use transducer with attention
 model-module: "espnet.nets.pytorch_backend.e2e_asr_tdnn_transducer:E2E"
+
+
+report_wer: true
+report_cer: true
+

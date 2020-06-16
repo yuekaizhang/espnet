@@ -533,7 +533,8 @@ def train(args):
         try:
             converter = CustomConverter(subsampling_factor=model.subsample[0], dtype=dtype)
         except:
-            converter = CustomConverter(subsampling_factor=1, dtype=dtype) # FIX tdnn Bug
+            raise AssertionError
+            #converter = CustomConverter(subsampling_factor=1, dtype=dtype) # FIX tdnn Bug
     else:
         converter = CustomConverterMulEnc(
             [i[0] for i in model.subsample_list], dtype=dtype

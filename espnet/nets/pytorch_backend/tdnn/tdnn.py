@@ -67,18 +67,19 @@ class TDNN(nn.Module):
         x = self.final_layer(x)
         return x, x_lengths
 
-def encoder_for(args,idim):
-    kernel_size = 3
-    dilation = 2
-    num_layers = 1 # args.elayers
-    #hidden_dims = [320 320 320 320 320 320 320 320 320 320 320 320] # FIX ME
-    hidden_dims = [160]
-    kernel_sizes = [3]
-    strides = [2]
-    dilations = [2]
-    odim = 320 # args.eprojs
+def encoder_for(args,idim,subsample):
+    #kernel_size = 3
+    #dilation = 2
+    #num_layers = 1 # args.elayers
+    #hidden_dims = [160]
+    #kernel_sizes = [3]
+    #strides = [2]
+    #dilations = [2]
+    #odim = 320 # args.eprojs
     
-    net = TDNN(idim,odim,num_layers,hidden_dims,kernel_sizes,strides,dilations)
+    net = TDNN(in_dim=idim,out_dim=args.eprojs,num_layers=args.elayers,
+               hidden_dims=args.tdnn_hdim,kernel_sizes=args.kernel_sizes,
+               strides=args.strides,dilations=args.dilations)
 
     return net
 

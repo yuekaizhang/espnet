@@ -5,8 +5,8 @@
 
 # general configuration
 backend=pytorch
-stage=3       # start from -1 if you need to start from data download
-stop_stage=3
+stage=4       # start from -1 if you need to start from data download
+stop_stage=4
 ngpu=1         # number of gpus ("0" uses cpu, otherwise use gpu)
 debugmode=1
 dumpdir=dump   # directory to dump full features
@@ -25,7 +25,8 @@ do_delta=false
 rnnt_mode='rnnt' # define transducer mode. Can be either 'rnnt' or 'rnnt-att'
 
 # transducer config
-train_config=conf/tuning/transducer/train_tdnn_transducer.yaml
+train_config=conf/tuning/transducer/train_transducer.yaml
+#train_config=conf/tuning/transducer/train_tdnn_transducer.yaml
 decode_config=conf/tuning/transducer/decode_transducer.yaml
 
 # finetuning related
@@ -37,7 +38,9 @@ n_average=5
 use_valbest_average=false
 
 # experiment tag
-tag="" # tag for managing experiments.
+tag=
+#tag="9layer_"
+#tag="adam" # tag for managing experiments.
 
 . utils/parse_options.sh || exit 1;
 
@@ -48,7 +51,7 @@ set -u
 set -o pipefail
 
 # datasets
-train_set=train_sp
+train_set=train
 train_dev=dev
 recog_set="dev test"
 
@@ -170,7 +173,7 @@ if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
             expname=${expname}_delta
         fi
 
-        expdir=exp/${expname}
+        expdir=exp/${tag}${expname}
 
         [ -f $expdir/results/model.loss.best ] && \
             [[ $expname != *"train_transducer"* ]] && return 0
@@ -274,7 +277,8 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
     fi
 
     pids=() # initialize pids
-    for rtask in ${recog_set}; do
+    for rtask in test; do
+    #for rtask in ${recog_set}; do
     (
         decode_dir=decode_${rtask}_$(basename ${decode_config%.*})
         feat_recog_dir=${dumpdir}/${rtask}/delta${do_delta}
