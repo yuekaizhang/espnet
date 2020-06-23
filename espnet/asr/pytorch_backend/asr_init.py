@@ -45,6 +45,11 @@ def transfer_verification(model_state_dict, partial_state_dict, modules):
         partial_modules, key=lambda x: (x[0], x[1])
     )
 
+    a = sorted(modules_model, key=lambda x: (x[0], x[1]))
+    b = sorted(partial_modules, key=lambda x: (x[0], x[1]))
+
+    logging.info(f"modules_model: {a}")
+    logging.info(b)
     return len_match and module_match
 
 

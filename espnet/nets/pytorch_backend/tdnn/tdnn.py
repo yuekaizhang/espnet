@@ -45,6 +45,7 @@ class TDNN(nn.Module):
         self.dropout = dropout
         #self.subsample = 1 # FIX ME asr.py line 533
         self.num_layers = num_layers
+        self.norm = nn.LayerNorm(hidden_dims[0]) # assert all hiddden dims are same
         self.tdnn = nn.ModuleList([
             tdnn_bn_relu(
                 in_dim if layer == 0 else hidden_dims[layer - 1],
@@ -62,6 +63,11 @@ class TDNN(nn.Module):
         for i in range(len(self.tdnn)):
             # apply Tdnn
             x, x_lengths = self.tdnn[i](x, x_lengths)
+            # transpose to layer norm the feature dim
+            x = x.transpose(2,1).contiguous()
+            x = self.norm(x)
+            x = x.transpose(1,2).contiguous()
+            
             x = F.dropout(x, p=self.dropout, training=self.training)
         x = x.transpose(2, 1).contiguous()  # turn it back to (B, T, D)
         x = self.final_layer(x)

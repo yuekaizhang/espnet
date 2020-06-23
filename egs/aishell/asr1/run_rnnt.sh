@@ -5,13 +5,13 @@
 
 # general configuration
 backend=pytorch
-stage=4       # start from -1 if you need to start from data download
-stop_stage=4
+stage=3       # start from -1 if you need to start from data download
+stop_stage=3
 ngpu=1         # number of gpus ("0" uses cpu, otherwise use gpu)
 debugmode=1
 dumpdir=dump   # directory to dump full features
 N=0            # number of minibatches to be used (mainly for debugging). "0" uses all minibatches.
-verbose=0      # verbose option
+verbose=1      # verbose option
 resume=        # Resume the training from snapshot
 lm_resume=     # Resume the LM training from snapshot
 
@@ -25,10 +25,8 @@ do_delta=false
 rnnt_mode='rnnt' # define transducer mode. Can be either 'rnnt' or 'rnnt-att'
 
 # transducer config
-train_config=conf/tuning/transducer/train_transducer.yaml
-#train_config=conf/tuning/transducer/train_tdnn_transducer.yaml
+train_config=conf/tuning/contextnet/train_transfer_contextnet_swish.yaml
 decode_config=conf/tuning/transducer/decode_transducer.yaml
-
 # finetuning related
 use_transfer=false # use transfer learning
 type_transfer='enc' # define type of transfer lr. Can be either 'enc', 'dec' or 'both'
@@ -39,8 +37,6 @@ use_valbest_average=false
 
 # experiment tag
 tag=
-#tag="9layer_"
-#tag="adam" # tag for managing experiments.
 
 . utils/parse_options.sh || exit 1;
 

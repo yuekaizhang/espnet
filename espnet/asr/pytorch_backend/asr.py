@@ -478,6 +478,13 @@ def train(args):
         dtype = getattr(torch, args.train_dtype)
     else:
         dtype = torch.float32
+
+    logging.info(f"The model is {model}")
+    model_total_params = sum(p.numel() for p in model.parameters())
+    model_trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    logging.info(f"The num of params:{model_total_params},\
+            trainable params:{model_trainable_params}")
+    
     model = model.to(device=device, dtype=dtype)
 
     # Setup an optimizer
@@ -489,9 +496,13 @@ def train(args):
         optimizer = torch.optim.Adam(model.parameters(), weight_decay=args.weight_decay)
     elif args.opt == "noam":
         from espnet.nets.pytorch_backend.transformer.optimizer import get_std_opt
-
         optimizer = get_std_opt(
             model, args.adim, args.transformer_warmup_steps, args.transformer_lr
+        )
+    elif args.opt == "noam_ctexnet":
+        from espnet.nets.pytorch_backend.transformer.optimizer import get_std_opt
+        optimizer = get_std_opt(
+            model, args.filters[-1], args.contextnet_warmup_steps, args.contextnet_lr
         )
     else:
         raise NotImplementedError("unknown optimizer: " + args.opt)

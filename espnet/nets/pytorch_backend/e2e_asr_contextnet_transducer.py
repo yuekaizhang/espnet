@@ -8,6 +8,8 @@ import chainer
 from chainer import reporter
 import torch
 
+from espnet.utils.cli_utils import strtobool
+
 from espnet.nets.asr_interface import ASRInterface
 from espnet.nets.pytorch_backend.nets_utils import get_subsample
 from espnet.nets.pytorch_backend.nets_utils import make_non_pad_mask
@@ -16,7 +18,9 @@ from espnet.nets.pytorch_backend.nets_utils import to_torch_tensor
 from espnet.nets.pytorch_backend.rnn.attentions import att_for
 
 #from espnet.nets.pytorch_backend.rnn.encoders import encoder_for
-from espnet.nets.pytorch_backend.tdnn.tdnn import encoder_for
+#from espnet.nets.pytorch_backend.tdnn.tdnn import encoder_for
+from espnet.nets.pytorch_backend.contextnet.encoder import Encoder
+
 
 from espnet.nets.pytorch_backend.transducer.initializer import initializer
 from espnet.nets.pytorch_backend.transducer.loss import TransLoss
@@ -24,7 +28,7 @@ from espnet.nets.pytorch_backend.transducer.rnn_decoders import decoder_for
 from espnet.nets.pytorch_backend.transducer.transformer_decoder import Decoder
 from espnet.nets.pytorch_backend.transducer.utils import prepare_loss_inputs
 from espnet.nets.pytorch_backend.transformer.attention import MultiHeadedAttention
-from espnet.nets.pytorch_backend.transformer.encoder import Encoder
+#from espnet.nets.pytorch_backend.transformer.encoder import Encoder
 from espnet.nets.pytorch_backend.transformer.mask import target_mask
 
 
@@ -58,7 +62,7 @@ class E2E(ASRInterface, torch.nn.Module):
         General options encapsulate both modules options.
 
         """
-        group = parser.add_argument_group("transformer model setting")
+        group = parser.add_argument_group("context model setting")
 
         # Encoder - general
         group.add_argument(
@@ -84,6 +88,7 @@ class E2E(ASRInterface, torch.nn.Module):
                 "vgggru",
                 "vggbgru",
                 "tdnn",
+                "contextnet"
             ],
             help="Type of encoder network architecture",
         )
@@ -136,19 +141,69 @@ class E2E(ASRInterface, torch.nn.Module):
             help="kernel sizes for each layers in TDNN",
         )
         group.add_argument(
-            "--dilations", 
-            default=[1,1,3,3,3], 
-            type=int, 
-            nargs='+',
-            help="dilations for tdnn"
+            "--num-blocks",
+            default=None,
+            type=lambda s: [int(mod) for mod in s.split("_") if s!= ""],
         )
         group.add_argument(
-            "--strides", 
-            default=[1,1,1,1,3], 
-            type=int, 
-            nargs='+',
-            help="strides for tdnn"
+            "--filters",
+            default=None,
+            type=lambda s: [int(mod) for mod in s.split("_") if s!= ""],
         )
+        group.add_argument(
+            "--num-convs",
+            default=None,
+            type=lambda s: [int(mod) for mod in s.split("_") if s!= ""],
+        )
+        group.add_argument(
+            "--kernels",
+            default=None,
+            type=lambda s: [int(mod) for mod in s.split("_") if s!= ""],
+        )
+        group.add_argument(
+            "--strides",
+            default=None,
+            type=lambda s: [int(mod) for mod in s.split("_") if s!= ""],
+        )
+        group.add_argument(
+            "--dilations",
+            default=None,
+            type=lambda s: [int(mod) for mod in s.split("_") if s!= ""],
+        )
+        group.add_argument(
+            "--dropouts",
+            default=None,
+            type=lambda s: [float(mod) for mod in s.split("_") if s!= ""],
+        )
+        group.add_argument(
+            "--residuals",
+            default=None,
+            type=lambda s: [strtobool(mod) for mod in s.split("_") if s!= ""],
+        )
+        group.add_argument(
+            "--activation",
+            default="relu",
+            type=str
+        )
+        group.add_argument(
+            "--se-reduction-ratio",
+            default=8,
+            type=int
+        )
+        #group.add_argument(
+        #    "--dilations", 
+        #    default=[1,1,3,3,3], 
+        #    type=int, 
+        #    nargs='+',
+        #    help="dilations for tdnn"
+        #)
+        #group.add_argument(
+        #    "--strides", 
+        #    default=[1,1,1,1,3], 
+        #    type=int, 
+        #    nargs='+',
+        #    help="strides for tdnn"
+        #)
         # Attention - general
         group.add_argument(
             "--adim",
@@ -224,7 +279,7 @@ class E2E(ASRInterface, torch.nn.Module):
             "--dlayers", default=1, type=int, help="Number of decoder layers"
         )
         group.add_argument(
-            "--dunits", default=320, type=int, help="Number of decoder hidden units"
+            "--dunits", default=640, type=int, help="Number of decoder hidden units"
         )
         group.add_argument(
             "--dropout-rate-decoder",
@@ -235,7 +290,7 @@ class E2E(ASRInterface, torch.nn.Module):
         # Decoder - RNN
         group.add_argument(
             "--dec-embed-dim",
-            default=320,
+            default=640,
             type=int,
             help="Number of decoder embeddings dimensions",
         )
@@ -247,13 +302,13 @@ class E2E(ASRInterface, torch.nn.Module):
         )
         # Transformer
         group.add_argument(
-            "--transformer-warmup-steps",
+            "--contextnet-warmup-steps",
             default=25000,
             type=int,
             help="optimizer warmup steps",
         )
         group.add_argument(
-            "--transformer-init",
+            "--contextnet-init",
             type=str,
             default="pytorch",
             choices=[
@@ -280,7 +335,7 @@ class E2E(ASRInterface, torch.nn.Module):
             help="transformer decoder input layer type",
         )
         group.add_argument(
-            "--transformer-lr",
+            "--contextnet-lr",
             default=10.0,
             type=float,
             help="Initial value of learning rate",
@@ -340,6 +395,21 @@ class E2E(ASRInterface, torch.nn.Module):
                 dropout_rate=args.dropout_rate,
                 positional_dropout_rate=args.dropout_rate,
                 attention_dropout_rate=args.transformer_attn_dropout_rate_encoder,
+            )
+        elif args.etype == "contextnet":
+            self.subsample = get_subsample(args, mode="asr", arch="contextnet")
+            self.encoder = Encoder(
+                    idim=idim,
+                    num_blocks=args.num_blocks,
+                    filters=args.filters,
+                    num_convs=args.num_convs,
+                    kernels=args.kernels,
+                    strides=args.strides,
+                    dilations=args.dilations,
+                    dropouts=args.dropouts,
+                    residuals=args.residuals,
+                    activation=args.activation,
+                    se_reduction_ratio=args.se_reduction_ratio
             )
         elif args.etype == "tdnn":
             self.subsample = get_subsample(args, mode="asr", arch="rnn-t")
@@ -433,9 +503,17 @@ class E2E(ASRInterface, torch.nn.Module):
             src_mask = make_non_pad_mask(ilens.tolist()).to(xs_pad.device).unsqueeze(-2)
 
             hs_pad, hs_mask = self.encoder(xs_pad, src_mask)
+        
+        elif self.etype == "contextnet":
+            xs_pad = xs_pad[:,:max(ilens)]
+            hs_pad = self.encoder(xs_pad.transpose(1,2))
+            hs_pad = hs_pad.transpose(1,2)
+            # TO DO: fix mask yuekai
+            hs_mask = torch.ones([xs_pad.size(0)]) * hs_pad.size(1)
         elif self.etype == "tdnn":
             #print(f"The shape of xs_pad, ilens, hs_pad, hs_mask")
             hs_pad, hs_mask = self.enc(xs_pad, ilens)
+
             #print(f"{hs_pad.shape} {hs_mask.shape} {xs_pad.shape} {ilens.shape}")
         else:
             hs_pad, hs_mask, _ = self.enc(xs_pad, ilens)
@@ -518,6 +596,10 @@ class E2E(ASRInterface, torch.nn.Module):
     def encode_tdnn(self,x):
         pass
         # TO DO
+    def encode_contextnet(self,x):
+        pass
+        # TO DO
+
 
     def recognize(self, x, recog_args, char_list=None, rnnlm=None):
         """Recognize input features.

@@ -394,6 +394,9 @@ def get_subsample(train_args, mode, arch):
     """
     if arch == "transformer":
         return np.array([1])
+    
+    elif arch == "contextnet":
+        return np.array([1])
 
     elif mode == "mt" and arch == "rnn":
         # +1 means input (+1) and layers outputs (train_args.elayer)
