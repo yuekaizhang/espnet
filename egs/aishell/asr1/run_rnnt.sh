@@ -5,8 +5,8 @@
 
 # general configuration
 backend=pytorch
-stage=3       # start from -1 if you need to start from data download
-stop_stage=3
+stage=4       # start from -1 if you need to start from data download
+stop_stage=4
 ngpu=1         # number of gpus ("0" uses cpu, otherwise use gpu)
 debugmode=1
 dumpdir=dump   # directory to dump full features
@@ -249,7 +249,7 @@ fi
 
 if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
     echo "stage 4: Decoding"
-    nj=16
+    nj=32
 
     if [[ $(get_yaml.py ${train_config} etype) = *transformer* ]] || \
            [[ $(get_yaml.py ${train_config} dtype) = *transformer* ]]; then
