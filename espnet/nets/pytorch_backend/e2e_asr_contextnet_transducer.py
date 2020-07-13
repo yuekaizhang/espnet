@@ -597,7 +597,10 @@ class E2E(ASRInterface, torch.nn.Module):
         pass
         # TO DO
     def encode_contextnet(self,x):
-        pass
+        x = torch.as_tensor(x).unsqueeze(0)
+        h = self.encoder(x.transpose(1,2))
+        h = h.transpose(1,2).squeeze(0)
+        return h
         # TO DO
 
 
@@ -618,6 +621,8 @@ class E2E(ASRInterface, torch.nn.Module):
             h = self.encode_transformer(x)
         elif self.etype == "tdnn":
             h = self.encode_tdnn(x)
+        elif self.etype == "contextnet":
+            h = self.encode_contextnet(x)
         else:
             h = self.encode_rnn(x)
         params = [h, recog_args]
