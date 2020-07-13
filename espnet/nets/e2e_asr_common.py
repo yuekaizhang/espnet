@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# encoding: utf-8
 
 # Copyright 2017 Johns Hopkins University (Shinji Watanabe)
 #  Apache 2.0  (http://www.apache.org/licenses/LICENSE-2.0)
@@ -198,11 +199,9 @@ class ErrorCalculator(object):
         for i, y_hat in enumerate(ys_hat):
             y_true = ys_pad[i]
             eos_true = np.where(y_true == -1)[0]
-            eos_true = eos_true[0] if len(eos_true) > 0 else len(y_true)
-            # To avoid wrong higher WER than the one obtained from the decoding
-            # eos from y_true is used to mark the eos in y_hat
-            # because of that y_hats has not padded outs with -1.
-            seq_hat = [self.char_list[int(idx)] for idx in y_hat[:eos_true]]
+            ymax = eos_true[0] if len(eos_true) > 0 else len(y_true)
+            # NOTE: padding index (-1) in y_true is used to pad y_hat
+            seq_hat = [self.char_list[int(idx)] for idx in y_hat[:ymax]]
             seq_true = [self.char_list[int(idx)] for idx in y_true if int(idx) != -1]
             seq_hat_text = "".join(seq_hat).replace(self.space, " ")
             seq_hat_text = seq_hat_text.replace(self.blank, "")
@@ -303,7 +302,7 @@ class ErrorCalculatorTrans(object):
             if self.recog_args.beam_size == 1:
                 nbest_hyps = self.dec.recognize(hs_pad[b], self.recog_args)
             else:
-                nbest_hyps = self.dec.recognize_beam(hs_pad[b], self.recog_args)
+                nbest_hyps = self.dec.recognize_beam_default(hs_pad[b], self.recog_args)
             batch_nbest.append(nbest_hyps)
 
         ys_hat = [nbest_hyp[0]["yseq"][1:] for nbest_hyp in batch_nbest]

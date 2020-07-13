@@ -145,6 +145,25 @@ def get_parser():
     )
     # transducer related
     parser.add_argument(
+        "--search-type",
+        type=str,
+        default="default",
+        choices=["default", "nsc"],
+        help="Type of beam search implementation to use during inference.",
+    )
+    parser.add_argument(
+        "--nstep",
+        type=int,
+        default=1,
+        help="Number of expansions allowed in NSC beam search.",
+    )
+    parser.add_argument(
+        "--prefix-alpha",
+        type=int,
+        default=2,
+        help="Length prefix difference allowed in NSC beam search.",
+    )
+    parser.add_argument(
         "--score-norm-transducer",
         type=strtobool,
         nargs="?",
@@ -169,6 +188,21 @@ def get_parser():
     )
     parser.add_argument("--word-dict", type=str, default=None, help="Word list to read")
     parser.add_argument("--lm-weight", type=float, default=0.1, help="RNNLM weight")
+    # ngram related
+    parser.add_argument(
+        "--ngram-model", type=str, default=None, help="ngram model file to read"
+    )
+    parser.add_argument("--ngram-weight", type=float, default=0.1, help="ngram weight")
+    parser.add_argument(
+        "--ngram-scorer",
+        type=str,
+        default="part",
+        choices=("full", "part"),
+        help="""if the ngram is set as a part scorer, similar with CTC scorer,
+                ngram scorer only scores topK hypethesis.
+                if the ngram is set as full scorer, ngram scorer scores all hypthesis
+                the decoding speed of part scorer is musch faster than full one""",
+    )
     # streaming related
     parser.add_argument(
         "--streaming-mode",
