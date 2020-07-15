@@ -67,7 +67,9 @@ class Encoder(torch.nn.Module):
         residuals=[False],
         activation='relu',
         se_reduction_ratio=8,
-        padding_idx=-1
+        padding_idx=-1,
+        context_window=-1,
+        interpolation_mode='nearest'
     ):
         """Construct an Encoder object."""
         super(Encoder, self).__init__()
@@ -88,7 +90,9 @@ class Encoder(torch.nn.Module):
                         dropout=dropouts[i],
                         activation=activation,
                         residual=residuals[i],
-                        se_reduction_ratio=se_reduction_ratio
+                        se_reduction_ratio=se_reduction_ratio,
+                        context_window=context_window,
+                        interpolation_mode=interpolation_mode,
                     )
                 )
                 in_channels = filters[i]

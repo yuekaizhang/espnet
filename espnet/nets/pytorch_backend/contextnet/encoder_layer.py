@@ -25,24 +25,37 @@ class Swish(nn.Module):
 
 
 class SELayer(nn.Module):
-    def __init__(self, channels, reduction_ratio, activation):
+    def __init__(self, channels, reduction_ratio,
+            context_window, interpolation_mode,activation):
         super(SELayer, self).__init__()
 
-        self.pool = nn.AdaptiveAvgPool1d(1)
+        self.context_window=int(context_window)
+        self.interpolation_mode = interpolation_mode
+        if self.context_window <= 0:
+            self.pool = nn.AdaptiveAvgPool1d(1)
+        else:
+            self.pool = nn.AvgPool1d(self.context_window,stride=1)
 
         self.fc = nn.Sequential(
             nn.Linear(channels, channels // reduction_ratio, bias=False),
             activation,
             nn.Linear(channels // reduction_ratio, channels, bias=False),
-            nn.Sigmoid()
+        #    nn.Sigmoid()
         )
 
     def forward(self, x):
-        b, c, _ = x.size()  # [B, C, T]
-        y = self.pool(x).view(b, c)  # [B, C, 1] -> [B, C]
-        y = self.fc(y).view(b, c, 1)  # [B, C, 1]
+        b, c, t = x.size()  # [B, C, T]
+        #y = self.pool(x).view(b, c)  # [B, C, 1] -> [B, C]
+        #y = self.fc(y).view(b, c, 1)  # [B, C, 1]
+        y = self.pool(x) #[B,C,T-context_windwo+1]
+        y = y.transpose(1,2)
+        y = self.fc(y) #[B,T-context_window+1,C]
+        y=y.transpose(1,2)
+        if self.context_window > 0:
+            y = torch.nn.functional.interpolate(y,size=t,model=self.interpolation_mode)
+        y = torch.sigmoid(y)
 
-        return x * y.expand_as(x)
+        return x * y
 
 
 class DepthwiseConvLayer(nn.Module):
@@ -102,6 +115,8 @@ class EncoderLayer(nn.Module):
         activation=None,
         residual=True,
         se_reduction_ratio=8,
+        context_window=-1,
+        interpolation_mode='nearest',
     ):
         """Construct an EncoderLayer object."""
         super(EncoderLayer, self).__init__()
@@ -142,8 +157,8 @@ class EncoderLayer(nn.Module):
         # self.convs.extend([activation, nn.Dropout(p=dropout)])
 
         self.convs.append(
-            SELayer(out_channels, reduction_ratio=se_reduction_ratio,
-                    activation=activation)
+            SELayer(out_channels, reduction_ratio=se_reduction_ratio,context_window=context_window,
+                    interpolation_mode=interpolation_mode,activation=activation)
         )
 
         if residual:
