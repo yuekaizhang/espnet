@@ -175,6 +175,7 @@ class E2E(ASRInterface, torch.nn.Module):
             default=None,
             type=lambda s: [float(mod) for mod in s.split("_") if s!= ""],
         )
+        # residual attention! FIX ME: yuekai
         group.add_argument(
             "--residuals",
             default=None,
@@ -189,6 +190,16 @@ class E2E(ASRInterface, torch.nn.Module):
             "--se-reduction-ratio",
             default=8,
             type=int
+        )
+        group.add_argument(
+            "--context-window",
+            default=-1,
+            type=int
+        )
+        group.add_argument(
+                "--interpolation-mode",
+                default="nearest",
+                type=str
         )
         #group.add_argument(
         #    "--dilations", 
@@ -361,6 +372,7 @@ class E2E(ASRInterface, torch.nn.Module):
             type=int,
             help="Number of dimensions in joint space",
         )
+    
         group.add_argument(
             "--score-norm-transducer",
             type=strtobool,
@@ -409,7 +421,9 @@ class E2E(ASRInterface, torch.nn.Module):
                     dropouts=args.dropouts,
                     residuals=args.residuals,
                     activation=args.activation,
-                    se_reduction_ratio=args.se_reduction_ratio
+                    se_reduction_ratio=args.se_reduction_ratio,
+                    context_window=args.context_window,
+                    interpolation_mode=args.interpolation_mode,
             )
         elif args.etype == "tdnn":
             self.subsample = get_subsample(args, mode="asr", arch="rnn-t")
