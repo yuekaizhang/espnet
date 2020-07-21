@@ -8,8 +8,8 @@
 
 # general configuration
 backend=pytorch
-stage=1        # start from 0 if you need to start from data preparation
-stop_stage=2
+stage=4        # start from 0 if you need to start from data preparation
+stop_stage=4
 ngpu=1         # number of gpus ("0" uses cpu, otherwise use gpu)
 debugmode=1
 dumpdir=dump   # directory to dump full features
@@ -20,9 +20,9 @@ resume=        # Resume the training from snapshot
 # feature configuration
 do_delta=false
 
-train_config=conf/train.yaml
+train_config=conf/tuning/contextnet/train_contextnet.yaml
 lm_config=conf/lm.yaml
-decode_config=conf/decode.yaml
+decode_config=conf/tuning/transducer/decoder_default.yaml
 
 # rnnlm related
 lm_resume=         # specify a snapshot file to resume LM training
@@ -41,7 +41,7 @@ data=/export/fs04/a05/xna/data/aishell
 data_url=www.openslr.org/resources/33
 
 # exp tag
-tag="" # tag for managing experiments.
+tag="no_context" # tag for managing experiments.
 
 . utils/parse_options.sh || exit 1;
 

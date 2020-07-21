@@ -52,7 +52,7 @@ class SELayer(nn.Module):
         y = self.fc(y) #[B,T-context_window+1,C]
         y=y.transpose(1,2)
         if self.context_window > 0:
-            y = torch.nn.functional.interpolate(y,size=t,model=self.interpolation_mode)
+            y = torch.nn.functional.interpolate(y,size=t,mode=self.interpolation_mode)
         y = torch.sigmoid(y)
 
         return x * y
@@ -153,12 +153,14 @@ class EncoderLayer(nn.Module):
                 dilation=dilation
             )
         )
-
-        # self.convs.extend([activation, nn.Dropout(p=dropout)])
-
-        self.convs.append(
-            SELayer(out_channels, reduction_ratio=se_reduction_ratio,context_window=context_window,
-                    interpolation_mode=interpolation_mode,activation=activation)
+        # excitation before SE layer   Attention:Yuekai 
+        self.convs.extend([activation, nn.Dropout(p=dropout)])
+        if context_window == 0:
+            pass
+        else:
+            self.convs.append(
+                    SELayer(out_channels, reduction_ratio=se_reduction_ratio,context_window=context_window,
+                            interpolation_mode=interpolation_mode,activation=activation)
         )
 
         if residual:

@@ -1,0 +1,70 @@
+# network architecture
+etype: contextnet
+
+# contextnet encoder related
+num-blocks: "1_2_1_3_1_3_3_1_7_1"
+filters: "256_256_256_256_256_256_512_512_512_640"
+num-convs: "1_5_5_5_5_5_5_5_5_1"
+kernels: "5_5_5_5_5_5_5_5_5_5"
+strides: "1_1_2_1_1_1_1_2_1_1"     # use less strides 11212
+dilations: "1_1_1_1_1_1_1_1_1_1"
+dropouts: "0.0_0.0_0.0_0.0_0.0_0.0_0.0_0.0_0.0_0.0"
+residual: "False_True_True_True_True_True_True_True_True_False"
+activation: "swish"
+se-reduction-ratio: 8
+context-window: -1
+eprojs: 640    
+# decoder related
+dtype: lstm
+dlayers: 1
+dec-embed-dim: 640
+dunits: 640
+dropout-rate-decoder: 0.2
+dropout-rate-embed-decoder: 0.2
+# dlayers: 6
+# dunits: 2048
+# attention related
+# adim: 256
+# aheads: 4
+
+
+joint-dim: 640 # FIX ME : yuekai
+
+# hybrid CTC/attentioni
+# transducer
+mtlalpha: 1.0
+rnnt-mode: 'rnnt'
+
+# label smoothing
+lsm-weight: 0.1
+
+# minibatch related
+batch-size: 16
+maxlen-in: 512  # if input length  > maxlen-in, batchsize is automatically reduced
+maxlen-out: 150 # if output length > maxlen-out, batchsize is automatically reduced
+
+# optimization related
+criterion: loss
+early-stop-criterion: "validation/main/loss"
+sortagrad: 0 # Feed samples from shortest to longest ; -1: enabled for all epochs, 0: disabled, other: enabled for 'other' epochs
+#opt: noam_ctexnet
+opt: adam
+accum-grad: 2
+grad-clip: 5
+patience: 3
+epochs: 50
+dropout-rate: 0.1
+
+# contextnet specific setting
+backend: pytorch
+model-module: "espnet.nets.pytorch_backend.e2e_asr_contextnet_transducer:E2E"
+contextnet-lr: 10.0
+contextnet-warmup-steps: 25000
+contextnet-init: pytorch
+
+
+
+#enc-init: /export/c09/pengcheng/asr/aishell_conformer/exp/train_sp_pytorch_train_pytorch_contextnet_swish/results/model.loss.best 
+#enc-init-mods: encoder
+
+#report-cer: True
