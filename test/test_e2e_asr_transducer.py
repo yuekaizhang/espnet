@@ -6,6 +6,8 @@ import numpy as np
 import pytest
 import torch
 
+import espnet.lm.pytorch_backend.extlm as extlm_pytorch
+import espnet.nets.pytorch_backend.lm.default as lm_pytorch
 from espnet.nets.pytorch_backend.nets_utils import pad_list
 
 
@@ -60,6 +62,7 @@ def get_default_recog_args(**kwargs):
         search_type="default",
         nstep=1,
         prefix_alpha=2,
+        u_max=1,
         score_norm_transducer=True,
         rnnlm=None,
     )
@@ -75,6 +78,39 @@ def get_default_scope_inputs():
     olens = [4, 3]
 
     return idim, odim, ilens, olens
+
+
+def get_lm():
+    n_layers = 1
+    n_units = 4
+
+    char_list = ["<blank>", "<space>", "a", "b", "c", "d", "<eos>"]
+
+    rnnlm = lm_pytorch.ClassifierWithState(
+        lm_pytorch.RNNLM(len(char_list), n_layers, n_units, typ="lstm")
+    )
+
+    return rnnlm
+
+
+def get_wordlm():
+    n_layers = 2
+    n_units = 10
+
+    char_list = ["<blank>", "<space>", "a", "b", "c", "d", "<eos>"]
+    word_list = ["<blank>", "<unk>", "ab", "id", "ac", "bd", "<eos>"]
+
+    char_dict = {x: i for i, x in enumerate(char_list)}
+    word_dict = {x: i for i, x in enumerate(word_list)}
+
+    word_rnnlm = lm_pytorch.ClassifierWithState(
+        lm_pytorch.RNNLM(len(word_list), n_layers, n_units)
+    )
+    word_rnnlm = lm_pytorch.ClassifierWithState(
+        extlm_pytorch.LookAheadWordLM(word_rnnlm.predictor, word_dict, char_dict)
+    )
+
+    return word_rnnlm
 
 
 def prepare_inputs(backend, idim, odim, ilens, olens, is_cuda=False):
@@ -102,6 +138,7 @@ def prepare_inputs(backend, idim, odim, ilens, olens, is_cuda=False):
 @pytest.mark.parametrize(
     "train_dic, recog_dic",
     [
+        ({}, {}),
         ({}, {"beam_size": 1}),
         ({"rnnt_mode": "rnnt-att"}, {"beam_size": 1}),
         ({}, {"beam_size": 2}),
@@ -110,7 +147,17 @@ def prepare_inputs(backend, idim, odim, ilens, olens, is_cuda=False):
         ({"rnnt_mode": "rnnt-att"}, {"beam_size": 2, "search_type": "nsc"}),
         ({}, {"beam_size": 2, "search_type": "nsc", "nstep": 3}),
         ({"rnnt_mode": "rnnt-att"}, {"beam_size": 2, "search_type": "nsc", "nstep": 3}),
-        ({}, {}),
+        ({}, {"beam_size": 2, "search_type": "tsd"}),
+        ({"rnnt_mode": "rnnt-att"}, {"beam_size": 2, "search_type": "tsd"}),
+        ({}, {"beam_size": 2, "search_type": "tsd", "nstep": 3}),
+        ({"rnnt_mode": "rnnt-att"}, {"beam_size": 2, "search_type": "tsd", "nstep": 3}),
+        ({}, {"beam_size": 2, "search_type": "alsd"}),
+        ({"rnnt_mode": "rnnt-att"}, {"beam_size": 2, "search_type": "alsd"}),
+        ({}, {"beam_size": 2, "search_type": "alsd", "u_max": 20}),
+        (
+            {"rnnt_mode": "rnnt-att"},
+            {"beam_size": 2, "search_type": "alsd", "u_max": 20},
+        ),
         ({"rnnt_mode": "rnnt-att"}, {}),
         ({"etype": "gru"}, {}),
         ({"rnnt_mode": "rnnt-att", "etype": "gru"}, {}),
@@ -204,6 +251,14 @@ def prepare_inputs(backend, idim, odim, ilens, olens, is_cuda=False):
             },
             {},
         ),
+        ({}, {"beam_size": 2, "search_type": "default", "rnnlm": get_lm()}),
+        ({}, {"beam_size": 2, "search_type": "default", "rnnlm": get_wordlm()}),
+        ({}, {"beam_size": 2, "search_type": "nsc", "rnnlm": get_lm()}),
+        ({}, {"beam_size": 2, "search_type": "nsc", "rnnlm": get_wordlm()}),
+        ({}, {"beam_size": 2, "search_type": "alsd", "rnnlm": get_lm()}),
+        ({}, {"beam_size": 2, "search_type": "alsd", "rnnlm": get_wordlm()}),
+        ({}, {"beam_size": 2, "search_type": "tsd", "rnnlm": get_lm()}),
+        ({}, {"beam_size": 2, "search_type": "tsd", "rnnlm": get_wordlm()}),
     ],
 )
 def test_pytorch_transducer_trainable_and_decodable(

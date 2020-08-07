@@ -148,20 +148,31 @@ def get_parser():
         "--search-type",
         type=str,
         default="default",
-        choices=["default", "nsc"],
-        help="Type of beam search implementation to use during inference.",
+        choices=["default", "nsc", "tsd", "alsd"],
+        help="""Type of beam search implementation to use during inference.
+        Can be either: default beam search, n-step constrained beam search ("nsc"),
+        time-synchronous decoding ("tsd") or alignment-length synchronous decoding
+        ("alsd").
+        Additional associated parameters: "nstep" (for nsc and tsd), "prefix-alpha"
+        (for nsc) and "u-max" (for alsd)""",
     )
     parser.add_argument(
         "--nstep",
         type=int,
         default=1,
-        help="Number of expansions allowed in NSC beam search.",
+        help="Number of expansions allowed in NSC beam search or TSD.",
     )
     parser.add_argument(
         "--prefix-alpha",
         type=int,
         default=2,
         help="Length prefix difference allowed in NSC beam search.",
+    )
+    parser.add_argument(
+        "--u-max",
+        type=int,
+        default=400,
+        help="Length prefix difference allowed in ALSD beam search.",
     )
     parser.add_argument(
         "--score-norm-transducer",
@@ -225,6 +236,22 @@ def get_parser():
     parser.add_argument(
         "--streaming-offset-margin", type=int, default=1, help="Offset margin"
     )
+    # non-autoregressive related
+    # Mask CTC related. See https://arxiv.org/abs/2005.08700 for the detail.
+    parser.add_argument(
+        "--maskctc-n-iterations",
+        type=int,
+        default=10,
+        help="Number of decoding iterations."
+        "For Mask CTC, set 0 to predict 1 mask/iter.",
+    )
+    parser.add_argument(
+        "--maskctc-probability-threshold",
+        type=float,
+        default=0.999,
+        help="Threshold probability for CTC output",
+    )
+
     return parser
 
 
